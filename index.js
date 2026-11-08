@@ -32,7 +32,8 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates
     ]
 });
 
@@ -105,13 +106,52 @@ client.once('ready', async () => {
         }
     }, 2 * 60 * 1000);
 });
-            client.on('messageCreate', async (message) => {
+// ASTROL Səsli Özəl Otaq Sistemi Dinləyicisi (Sonsuz sistem)
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    const guildId = newState.guild.id;
+    const settings = serverSettings.get(guildId);
+    if (!settings || !settings.privateVoiceChannelId) return;
+
+    // Əgər istifadəçi "Odayı Oluştur" kanalına qoşulubsa
+    if (newState.channelId === settings.privateVoiceChannelId) {
+        try {
+            const member = newState.member;
+            const channelName = `🔒 ${member.user.username} Odası`;
+            
+            const parentCategory = newState.channel.parent;
+            const createdChannel = await newState.guild.channels.create({
+                name: channelName,
+                type: ChannelType.GuildVoice,
+                parent: parentCategory ? parentCategory.id : null,
+                permissionOverwrites: [
+                    {
+                        id: member.id,
+                        allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
+                    }
+                ]
+            });
+
+            await member.voice.setChannel(createdChannel);
+
+            // Otaq boş qalanda avtomatik silinməsi üçün izləmə
+            const checkEmpty = client.on('voiceStateUpdate', (o, n) => {
+                if (createdChannel.members.size === 0) {
+                    createdChannel.delete().catch(() => {});
+                }
+            });
+        } catch (err) {
+            console.error('[ÖZEL ODA HATA]:', err);
+        }
+    }
+});
+
+client.on('messageCreate', async (message) => {
     try {
         if (message.author.bot || !message.guild) return;
 
         const guildId = message.guild.id;
         if (!serverSettings.has(guildId)) {
-            serverSettings.set(guildId, { jailRoleId: null, jailAuthRoleId: null, memberRoleId: null, exceptionChannelId: null });
+            serverSettings.set(guildId, { jailRoleId: null, jailAuthRoleId: null, memberRoleId: null, exceptionChannelId: null, privateVoiceChannelId: null });
         }
         const settings = serverSettings.get(guildId);
 
@@ -223,7 +263,7 @@ client.once('ready', async () => {
             settings.memberRoleId = role.id;
             message.reply(`✅ Otomatik üye rolü ayarlandı.`);
             return;
-            }
+    }
                 // --- 7. MODERASYON: BAN & UNBAN (EFENDİM LOGLU) ---
         if (command === 'ban') {
             if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ `Üyeleri Yasakla` yetkiniz yok.');
@@ -362,19 +402,20 @@ client.once('ready', async () => {
             return;
         }
 
-        // --- 12. ÖZEL ODA SETUP (ASTROL ÜSLUBU) ---
+        // --- 12. ÖZEL ODA SETUP (ASTROL SİSTEMİ) ---
         if (command === 'özelodasetup') {
-            if (!isAdmin) return message.reply('❌ Yetkiniz yok.');
+            if (!isAdmin) return message.reply('❌ Bu komut için `Yönetici` yetkiniz yok.');
             const category = await message.guild.channels.create({
                 name: '🔊 ÖZEL ODA SİSTEMİ',
                 type: ChannelType.GuildCategory
             });
-            const channel = await message.guild.channels.create({
+            const voiceChannel = await message.guild.channels.create({
                 name: '➕ Odayı Oluştur',
                 type: ChannelType.GuildVoice,
                 parent: category.id
             });
-            message.reply(`✅ Başarıyla özel oda kategorisi ve oluk kanal ID: \`${channel.id}\` oluşturuldu!`);
+            settings.privateVoiceChannelId = voiceChannel.id;
+            message.reply(`✅ ASTROL Özel Oda Sistemi başarıyla kuruldu! Kullanıcılar <#${voiceChannel.id}> kanalına girerek kendi odalarını açabilirler.`);
             return;
         }
 
@@ -400,7 +441,7 @@ client.once('ready', async () => {
             );
 
             const sentMsg = await message.reply({ embeds: [embed], components: [row] });
-            const collector = sentMsg.createMessageComponentCollector({ time: 30000 });
+            const collector = sentMsg.createMessageComponentCollector(); // Sonsuz kollektor
 
             collector.on('collect', async i => {
                 if (i.user.id !== message.author.id) {
@@ -413,7 +454,7 @@ client.once('ready', async () => {
             return;
         }
 
-        // --- 14. DİĞERLERİ (.snipe, .yavaş-mod, .avatar, .yardim) ---
+        // --- 14. DİĞERLERİ (.snipe, .yavaş-mod, .avatar) ---
         if (command === 'snipe') {
             const sniped = snipeMap.get(message.channel.id);
             if (!sniped) return message.reply('❌ Bu kanalda silinen son mesaj yok.');
@@ -446,18 +487,68 @@ client.once('ready', async () => {
             return;
         }
 
+        // --- 15. SONSUZ BUTONLU VE KATEGORİLİ .YARDIM MENÜSÜ ---
         if (command === 'yardim' || command === 'help') {
-            const embed = new EmbedBuilder()
-                .setTitle('📖 ASTROL Yardım Menüsü')
-                .setDescription('Bütün komutlar ve koruma sistemleri aktif!')
+            const modEmbed = new EmbedBuilder()
+                .setTitle('📖 ASTROL Yardım - Moderasyon (1/3)')
+                .setDescription('Sunucu ceza ve yönetim komutları:')
                 .addFields(
-                    { name: 'Moderasyon', value: '`.ban`, `.unban`, `.kick`, `.mute`, `.unmute`, `.warn`, `.warnings`, `.clearwarns`', inline: false },
-                    { name: 'Jail & Rol', value: '`.jail`, `.unjail`, `.jailrol`, `.jailytrol`, `.üyerol`, `.rolver`, `.rolal`', inline: false },
-                    { name: 'Sistem & Bilgi', value: '`.küfür-ekle`, `.küfür-sil`, `.linkistisna`, `.özelodasetup`, `.sunucubilgi`, `.snipe`, `.yavaş-mod`', inline: false }
+                    { name: '`.ban @kişi [sebep]`', value: 'Kişiyi banlar, EFENDİM\'e log atar.', inline: false },
+                    { name: '`.unban ID`', value: 'ID ile banı kaldırır.', inline: false },
+                    { name: '`.mute @üye <süre>`', value: 'Timeout uygular (Örn: 10m, 2h).', inline: false },
+                    { name: '`.unmute @üye`', value: 'Timeout\'u kaldırır.', inline: false },
+                    { name: '`.kick @üye`', value: 'Üyeyi sunucudan atar.', inline: false }
                 )
                 .setColor('#38bdf8')
-                .setTimestamp();
-            message.reply({ embeds: [embed] });
+                .setFooter({ text: 'Sayfa 1 / 3 - Moderasyon' });
+
+            const jailRoleEmbed = new EmbedBuilder()
+                .setTitle('📖 ASTROL Yardım - Jail & Rol (2/3)')
+                .setDescription('Hapis ve rol komutları:')
+                .addFields(
+                    { name: '`.jail @üye`', value: 'Üyeyi hapis rolüyle izole eder.', inline: false },
+                    { name: '`.unjail @üye`', value: 'Hapis cezasını kaldırır.', inline: false },
+                    { name: '`.jailrol <ID>` / `.jailytrol @rol`', value: 'Jail rollerini ayarlar.', inline: false },
+                    { name: '`.rolver @üye @rol` / `.rolal`', value: 'Rol verip alır.', inline: false },
+                    { name: '`.warn` / `.warnings` / `.clearwarns`', value: 'Uyarı sistemi.', inline: false }
+                )
+                .setColor('#38bdf8')
+                .setFooter({ text: 'Sayfa 2 / 3 - Jail & Rol' });
+
+            const systemEmbed = new EmbedBuilder()
+                .setTitle('📖 ASTROL Yardım - Sistem & Koruma (3/3)')
+                .setDescription('Güvenlik ve yardımcı komutlar:')
+                .addFields(
+                    { name: '`.küfür-ekle` / `.küfür-sil`', value: 'Küfür listesini yönetir.', inline: false },
+                    { name: '`.linkistisna #kanal`', value: 'Kanalda link serbestliği sağlar.', inline: false },
+                    { name: '`.özelodasetup`', value: 'Səsli özəl otaq sistemini qurur.', inline: false },
+                    { name: '`.sunucubilgi` / `.snipe` / `.avatar`', value: 'Bilgi ve eğlence.', inline: false }
+                )
+                .setColor('#38bdf8')
+                .setFooter({ text: 'Sayfa 3 / 3 - Sistem' });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_mod').setLabel('🛡️ Moderasyon').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('btn_jail').setLabel('🔒 Jail & Rol').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('btn_system').setLabel('⚙️ Sistem & Koruma').setStyle(ButtonStyle.Secondary)
+            );
+
+            const sentMsg = await message.reply({ embeds: [modEmbed], components: [row] });
+            const collector = sentMsg.createMessageComponentCollector(); // Sonsuz kollektor (vaxt məhdudiyyəti yoxdur)
+
+            collector.on('collect', async i => {
+                if (i.user.id !== message.author.id) {
+                    return i.reply({ content: '❌ Bu butonları yalnızca komutu yazan kullanıcı kullanabilir!', ephemeral: true });
+                }
+
+                if (i.customId === 'btn_mod') {
+                    await i.update({ embeds: [modEmbed], components: [row] });
+                } else if (i.customId === 'btn_jail') {
+                    await i.update({ embeds: [jailRoleEmbed], components: [row] });
+                } else if (i.customId === 'btn_system') {
+                    await i.update({ embeds: [systemEmbed], components: [row] });
+                }
+            });
             return;
         }
 
