@@ -64,7 +64,7 @@ const client = new Client({
     ]
 });
 
-const PREFIX = '.'; // Yeni prefiks: nokta (.)
+const PREFIX = '.';
 const ADMIN_ID = '1561721639518081105'; // Sənin ID-n
 
 const snipeMap = new Map();
@@ -84,15 +84,15 @@ client.on('messageDelete', message => {
 client.once('ready', async () => {
     console.log(`[BOT]: ${client.user.tag} olarak giriş yapıldı!`);
 
-    // 7/24 Keep-Alive Mexanizmi (Hər 2 dəqiqədən bir özünə ping atır və sənə DM göndərir)
+    // 7/24 Keep-Alive Mexanizmi (Hər 2 dəqiqədən bir rəsmi saytına ping atır və sənə DM göndərir)
     setInterval(async () => {
         try {
-            const res = await fetch(`https://${process.env.RENDER_EXTERNAL_URL || 'localhost:' + PORT}`);
+            const res = await fetch('https://zyardim.onrender.com/');
             console.log(`[KEEP-ALIVE]: Ping atıldı, Durum: ${res.status}`);
 
             const adminUser = await client.users.fetch(ADMIN_ID).catch(() => null);
             if (adminUser) {
-                await adminUser.send('🟢 **Bot Aktif!** Site kontrol edildi ve Render uykusundan korundu.');
+                await adminUser.send('🟢 **Bot Aktif!** https://zyardim.onrender.com/ adresi kontrol edildi ve Render uykusundan korundu.');
             }
         } catch (err) {
             console.error('[KEEP-ALIVE] Hata:', err.message);
@@ -391,4 +391,4 @@ client.on('messageCreate', async (message) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-                    
+    
