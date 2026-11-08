@@ -5,8 +5,7 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle,
-    PermissionFlagsBits,
-    ChannelType
+    PermissionFlagsBits 
 } = require('discord.js');
 const express = require('express');
 const path = require('path');
@@ -18,19 +17,19 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// Saytda botun olduğu sunucu məlumatları görünür
+// Web saytında sunucu məlumatlarını göstərmək üçün
 app.get('/', (req, res) => {
     const guild = client.guilds.cache.first();
-    const guildName = guild ? guild.name : 'Heç bir sunucuya qoşulmayıb';
+    const guildName = guild ? guild.name : 'Henüz bir sunucuya bağlanmadı';
     const memberCount = guild ? guild.memberCount : 0;
-    const botTag = client.user ? client.user.tag : 'Aktivləşir...';
+    const botTag = client.user ? client.user.tag : 'Aktifleşiyor...';
 
     res.send(`
         <!DOCTYPE html>
-        <html lang="az">
+        <html lang="tr">
         <head>
             <meta charset="UTF-8">
-            <title>Bot Status & Sunucu Məlumatı</title>
+            <title>Bot Durumu & Sunucu Bilgisi</title>
             <style>
                 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding-top: 80px; }
                 .card { background: #1e293b; display: inline-block; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }
@@ -41,11 +40,11 @@ app.get('/', (req, res) => {
         </head>
         <body>
             <div class="card">
-                <h1>🤖 Bot Aktiv və İşləkdir!</h1>
-                <p><strong>Bot:</strong> ${botTag}</p>
-                <p><strong>Sunucu:</strong> ${guildName}</p>
-                <p><strong>Üzv Sayı:</strong> ${memberCount}</p>
-                <p>Status: <span class="status">🟢 7/24 Online (Render Qorumalı)</span></p>
+                <h1>🤖 Bot Aktif ve Çalışır Durumda!</h1>
+                <p><strong>Bot Adı:</strong> ${botTag}</p>
+                <p><strong>Sunucu Adı:</strong> ${guildName}</p>
+                <p><strong>Üye Sayısı:</strong> ${memberCount}</p>
+                <p>Durum: <span class="status">🟢 7/24 Online (Render Korumalı)</span></p>
             </div>
         </body>
         </html>
@@ -65,16 +64,16 @@ const client = new Client({
     ]
 });
 
-const PREFIX = 'z!';
+const PREFIX = '.'; // Yeni prefiks: nokta (.)
+const ADMIN_ID = '1561721639518081105'; // Sənin ID-n
 
-// Yaddaşda saxlanılan sistemlər (Snipe və Warnlər üçün)
 const snipeMap = new Map();
-const warnsMap = new Map(); // kullanıcıID -> sayı
+const warnsMap = new Map();
 
 client.on('messageDelete', message => {
     if (message.author && !message.author.bot) {
         snipeMap.set(message.channel.id, {
-            content: message.content || '[Şəkil və ya Fayl]',
+            content: message.content || '[Fotoğraf veya Dosya]',
             author: message.author.tag,
             image: message.attachments.first() ? message.attachments.first().url : null,
             time: new Date()
@@ -83,81 +82,81 @@ client.on('messageDelete', message => {
 });
 
 client.once('ready', async () => {
-    console.log(`[BOT]: ${client.user.tag} olaraq giriş edildi!`);
+    console.log(`[BOT]: ${client.user.tag} olarak giriş yapıldı!`);
 
-    // 7/24 Keep-Alive Mexanizmi (Hər 2 dəqiqədən bir)
+    // 7/24 Keep-Alive Mexanizmi (Hər 2 dəqiqədən bir özünə ping atır və sənə DM göndərir)
     setInterval(async () => {
         try {
             const res = await fetch(`https://${process.env.RENDER_EXTERNAL_URL || 'localhost:' + PORT}`);
-            console.log(`[KEEP-ALIVE]: Ping atıldı, Status: ${res.status}`);
+            console.log(`[KEEP-ALIVE]: Ping atıldı, Durum: ${res.status}`);
 
-            const adminUser = await client.users.fetch('1561721639518081105').catch(() => null);
+            const adminUser = await client.users.fetch(ADMIN_ID).catch(() => null);
             if (adminUser) {
-                await adminUser.send('🟢 **Bot Aktivdir!** Sayt yoxlanıldı və Render-in yatmasının qarşısı alındı.');
+                await adminUser.send('🟢 **Bot Aktif!** Site kontrol edildi ve Render uykusundan korundu.');
             }
         } catch (err) {
-            console.error('[KEEP-ALIVE] Xəta:', err.message);
+            console.error('[KEEP-ALIVE] Hata:', err.message);
         }
     }, 2 * 60 * 1000);
 });
-          client.on('messageCreate', async (message) => {
+client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // 1. z!yardım (Butonlu və Səhifələnmiş Embed Menyu)
+    // 1. .yardim (Butonlu və Səhifələnmiş Embed Menyu)
     if (command === 'yardim' || command === 'help') {
         const page1 = new EmbedBuilder()
-            .setTitle('📖 Yardım Menüsü - Moderasiya (1/3)')
-            .setDescription('Şəkillərdəki moderasiya əmrləri:')
+            .setTitle('📖 Yardım Menüsü - Moderasyon (1/3)')
+            .setDescription('Sunucu moderasyon komutları:')
             .addFields(
-                { name: '`z!ban @üye [səbəb]`', value: 'İstifadəçini banlayar.', inline: false },
-                { name: '`z!unban <ID>`', value: 'ID ilə banı qaldırar.', inline: false },
-                { name: '`z!forceban <ID> [səbəb]`', value: 'ID ilə birbaşa banlayar.', inline: false },
-                { name: '`z!kick @üye [səbəb]`', value: 'İstifadəçini sunucudan atar.', inline: false },
-                { name: '`z!mute / z!timeout @üye <süre> [səbəb]`', value: 'Üzüyə zaman aşımı tətbiq edər.', inline: false },
-                { name: '`z!unmute / z!untimeout @üye`', value: 'Zaman aşımını qaldırar.', inline: false }
+                { name: '`.ban @üye [sebep]`', value: 'Üyeyi sunucudan yasaklar.', inline: false },
+                { name: '`.unban <ID>`', value: 'ID ile yasağı kaldırır.', inline: false },
+                { name: '`.forceban <ID> [sebep]`', value: 'ID ile direkt yasaklar.', inline: false },
+                { name: '`.kick @üye [sebep]`', value: 'Üyeyi sunucudan atar.', inline: false },
+                { name: '`.mute / .timeout @üye <süre> [sebep]`', value: 'Üyeye zaman aşımı uygular (Örn: 10m, 1h).', inline: false },
+                { name: '`.unmute / .untimeout @üye`', value: 'Zaman aşımını kaldırır.', inline: false }
             )
             .setColor('#38bdf8')
-            .setFooter({ text: 'Səhifə 1 / 3' })
+            .setFooter({ text: 'Sayfa 1 / 3' })
             .setTimestamp();
 
         const page2 = new EmbedBuilder()
-            .setTitle('📖 Yardım Menüsü - Cəza və Qoruma (2/3)')
-            .setDescription('Xəbərdarlıq və Hapis sistemləri:')
+            .setTitle('📖 Yardım Menüsü - Ceza ve Koruma (2/3)')
+            .setDescription('Uyarı ve Hapis sistemleri:')
             .addFields(
-                { name: '`z!warn @üye [səbəb]`', value: 'İstifadəçiyə xəbərdarlıq verər.', inline: false },
-                { name: '`z!warnings @üye`', value: 'Xəbərdarlıq sayını göstərər.', inline: false },
-                { name: '`z!clearwarns @üye`', value: 'Xəbərdarlıqları təmizləyər.', inline: false },
-                { name: '`z!hapis @üye [səbəb]`', value: 'Üzüyü hapse atar.', inline: false },
-                { name: '`z!hapis-kaldır @üye`', value: 'Hapis rolünü qaldırar.', inline: false },
-                { name: '`z!sil <sayı>`', value: 'Mesajları silər.', inline: false }
+                { name: '`.warn @üye [sebep]`', value: 'Üyeye uyarı verir.', inline: false },
+                { name: '`.warnings @üye`', value: 'Uyarı sayısını gösterir.', inline: false },
+                { name: '`.clearwarns @üye`', value: 'Uyarıları temizler.', inline: false },
+                { name: '`.hapis @üye [sebep]`', value: 'Üyeyi hapishaneye atar.', inline: false },
+                { name: '`.hapis-kaldır @üye`', value: 'Hapis cezasını kaldırır.', inline: false },
+                { name: '`.sil <sayı>`', value: 'Mesajları toplu siler.', inline: false }
             )
             .setColor('#38bdf8')
-            .setFooter({ text: 'Səhifə 2 / 3' })
+            .setFooter({ text: 'Sayfa 2 / 3' })
             .setTimestamp();
 
         const page3 = new EmbedBuilder()
-            .setTitle('📖 Yardım Menüsü - İdarəetmə & Əyləncə (3/3)')
-            .setDescription('Rol, kanal və digər əmrlər:')
+            .setTitle('📖 Yardım Menüsü - Yönetim & Eğlence (3/3)')
+            .setDescription('Rol, kanal ve bilgi komutları:')
             .addFields(
-                { name: '`z!snipe`', value: 'Silinən son mesajı göstərər.', inline: false },
-                { name: '`z!rol-ver @üye @rol`', value: 'Üzüyə rol verər.', inline: false },
-                { name: '`z!rol-al @üye @rol`', value: 'Üzüdən rol alar.', inline: false },
-                { name: '`z!rol-oluştur <isim>`', value: 'Yeni rol yaradar.', inline: false },
-                { name: '`z!yavaş-mod <saniyə>`', value: 'Kanal yavaş rejimini tənzimləyər.', inline: false },
-                { name: '`z!sunucubilgi` / `z!avatar`', value: 'Məlumat əmrləri.', inline: false }
+                { name: '`.snipe`', value: 'Silinen son mesajı gösterir.', inline: false },
+                { name: '`.rol-ver @üye @rol`', value: 'Üyeye rol verir.', inline: false },
+                { name: '`.rol-al @üye @rol`', value: 'Üyeden rol alır.', inline: false },
+                { name: '`.rol-oluştur <isim>`', value: 'Yeni rol oluşturur.', inline: false },
+                { name: '`.yavaş-mod <saniye>`', value: 'Kanalın yavaş modunu ayarlar.', inline: false },
+                { name: '`.sunucubilgi` / `.avatar`', value: 'Bilgi komutları.', inline: false }
             )
             .setColor('#38bdf8')
-            .setFooter({ text: 'Səhifə 3 / 3' })
+            .setFooter({ text: 'Sayfa 3 / 3' })
             .setTimestamp();
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('p_first').setLabel('◀◀').setStyle(ButtonStyle.Secondary).setDisabled(true),
-            new ButtonBuilder().setCustomId('p_prev').setLabel('◀ Öncəki').setStyle(ButtonStyle.Primary).setDisabled(true),
-            new ButtonBuilder().setCustomId('p_next').setLabel('Sonrakı ▶').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('p_prev').setLabel('◀ Önceki').setStyle(ButtonStyle.Primary).setDisabled(true),
+            new ButtonBuilder().setCustomId('p_next').setLabel('Sonraki ▶').setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId('p_last').setLabel('▶▶').setStyle(ButtonStyle.Secondary)
         );
 
@@ -167,7 +166,7 @@ client.once('ready', async () => {
 
         collector.on('collect', async i => {
             if (i.user.id !== message.author.id) {
-                return i.reply({ content: '❌ Bu düyməni yalnız komutu yazan istifadəçi istifadə edə bilər!', ephemeral: true });
+                return i.reply({ content: '❌ Bu butonları yalnızca komutu yazan kullanıcı kullanabilir!', ephemeral: true });
             }
 
             if (i.customId === 'p_first') page = 1;
@@ -178,8 +177,8 @@ client.once('ready', async () => {
             const pages = [page1, page2, page3];
             const newRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('p_first').setLabel('◀◀').setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
-                new ButtonBuilder().setCustomId('p_prev').setLabel('◀ Öncəki').setStyle(ButtonStyle.Primary).setDisabled(page === 1),
-                new ButtonBuilder().setCustomId('p_next').setLabel('Sonrakı ▶').setStyle(ButtonStyle.Primary).setDisabled(page === 3),
+                new ButtonBuilder().setCustomId('p_prev').setLabel('◀ Önceki').setStyle(ButtonStyle.Primary).setDisabled(page === 1),
+                new ButtonBuilder().setCustomId('p_next').setLabel('Sonraki ▶').setStyle(ButtonStyle.Primary).setDisabled(page === 3),
                 new ButtonBuilder().setCustomId('p_last').setLabel('▶▶').setStyle(ButtonStyle.Secondary).setDisabled(page === 3)
             );
 
@@ -187,127 +186,127 @@ client.once('ready', async () => {
         });
     }
 
-    // 2. z!sil
+    // 2. .sil
     else if (command === 'sil') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return message.reply('❌ Bu komut için `Mesajları Yönet` yetkiniz yok.');
         const count = parseInt(args[0]);
-        if (isNaN(count) || count < 1 || count > 100) return message.reply('1 ilə 100 arasında rəqəm yazın.');
+        if (isNaN(count) || count < 1 || count > 100) return message.reply('⚠️ Lütfen 1 ile 100 arasında bir sayı belirtin.');
         await message.channel.bulkDelete(count, true);
-        const m = await message.channel.send(`✅ ${count} mesaj silindi.`);
+        const m = await message.channel.send(`✅ Başarıyla **${count}** mesaj silindi.`);
         setTimeout(() => m.delete().catch(() => {}), 3000);
     }
 
-    // 3. z!ban
+    // 3. .ban
     else if (command === 'ban') {
-        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ Bu komut için `Üyeleri Yasakla` yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
-        const reason = args.slice(1).join(' ') || 'Səbəb yoxdur';
+        if (!member) return message.reply('⚠️ Lütfen banlanacak üyeyi etiketleyin.');
+        const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
         await member.ban({ reason });
-        message.reply(`🔨 **${member.user.tag}** banlandı. Səbəb: ${reason}`);
+        message.reply(`🔨 **${member.user.tag}** sunucudan yasaklandı. Sebep: ${reason}`);
     }
 
-    // 4. z!unban
+    // 4. .unban
     else if (command === 'unban') {
-        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ Yetkiniz yok.');
         const userId = args[0];
-        if (!userId) return message.reply('İstifadəçi ID-si daxil edin.');
+        if (!userId) return message.reply('⚠️ Lütfen bir kullanıcı ID\'si girin.');
         await message.guild.members.unban(userId);
-        message.reply(`✅ ID: ${userId} olan istifadəçinin banı qaldırıldı.`);
+        message.reply(`✅ ID: ${userId} olan kullanıcının yasağı kaldırıldı.`);
     }
 
-    // 5. z!forceban
+    // 5. .forceban
     else if (command === 'forceban') {
-        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ Yetkiniz yok.');
         const userId = args[0];
-        if (!userId) return message.reply('ID daxil edin.');
-        const reason = args.slice(1).join(' ') || 'Səbəb yoxdur';
+        if (!userId) return message.reply('⚠️ Lütfen bir kullanıcı ID\'si girin.');
+        const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
         await message.guild.members.ban(userId, { reason });
-        message.reply(`🔨 ID: ${userId} force-ban edildi.`);
+        message.reply(`🔨 ID: ${userId} olan kullanıcı kalıcı olarak yasaklandı.`);
     }
 
-    // 6. z!kick
+    // 6. .kick
     else if (command === 'kick') {
-        if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) return message.reply('❌ Bu komut için `Üyeleri At` yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
-        const reason = args.slice(1).join(' ') || 'Səbəb yoxdur';
+        if (!member) return message.reply('⚠️ Lütfen atılacak üyeyi etiketleyin.');
+        const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
         await member.kick(reason);
-        message.reply(`👢 **${member.user.tag}** atıldı.`);
+        message.reply(`👢 **${member.user.tag}** sunucudan atıldı. Sebep: ${reason}`);
     }
 
-    // 7. z!mute / z!timeout
+    // 7. .mute / .timeout
     else if (command === 'mute' || command === 'timeout') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
+        if (!member) return message.reply('⚠️ Lütfen üyeyi etiketleyin.');
         const duration = args[1];
-        if (!duration || !ms(duration)) return message.reply('Düzgün vaxt yazın (Məs: 10m, 1h).');
-        const reason = args.slice(2).join(' ') || 'Səbəb yoxdur';
+        if (!duration || !ms(duration)) return message.reply('⚠️ Geçerli bir süre yazın (Örn: 10m, 1h, 1d).');
+        const reason = args.slice(2).join(' ') || 'Sebep belirtilmedi';
         await member.timeout(ms(duration), reason);
-        message.reply(`🔇 **${member.user.tag}** ${duration} müddətinə susduruldu.`);
+        message.reply(`🔇 **${member.user.tag}** ${duration} süreyle zaman aşımına uğratıldı.`);
     }
 
-    // 8. z!unmute / z!untimeout
+    // 8. .unmute / .untimeout
     else if (command === 'unmute' || command === 'untimeout') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
+        if (!member) return message.reply('⚠️ Lütfen üyeyi etiketleyin.');
         await member.timeout(null);
-        message.reply(`🔊 **${member.user.tag}** üzərindən timeout qaldırıldı.`);
+        message.reply(`🔊 **${member.user.tag}** üzerindeki zaman aşımı kaldırıldı.`);
     }
 
-    // 9. z!warn
+    // 9. .warn
     else if (command === 'warn' || command === 'uyarı') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
-        const reason = args.slice(1).join(' ') || 'Səbəb yoxdur';
+        if (!member) return message.reply('⚠️ Lütfen üyeyi etiketleyin.');
+        const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
         
         const currentWarns = (warnsMap.get(member.id) || 0) + 1;
         warnsMap.set(member.id, currentWarns);
-        message.reply(`⚠️ **${member.user.tag}** xəbərdar edildi! Ümumi xəbərdarlıq: ${currentWarns}. Səbəb: ${reason}`);
+        message.reply(`⚠️ **${member.user.tag}** uyarlandı! Toplam uyarı: ${currentWarns}. Sebep: ${reason}`);
     }
 
-    // 10. z!warnings
+    // 10. .warnings
     else if (command === 'warnings') {
         const member = message.mentions.members.first() || message.member;
         const count = warnsMap.get(member.id) || 0;
-        message.reply(`ℹ️ **${member.user.tag}** istifadəçisinin ümumi xəbərdarlıq sayı: **${count}**`);
+        message.reply(`ℹ️ **${member.user.tag}** adlı kullanıcının toplam uyarı sayısı: **${count}**`);
     }
 
-    // 11. z!clearwarns
+    // 11. .clearwarns
     else if (command === 'clearwarns') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
+        if (!member) return message.reply('⚠️ Lütfen üyeyi etiketleyin.');
         warnsMap.set(member.id, 0);
-        message.reply(`✅ **${member.user.tag}** istifadəçisinin xəbərdarlıqları sıfırlandı.`);
+        message.reply(`✅ **${member.user.tag}** adlı kullanıcının uyarıları sıfırlandı.`);
     }
 
-    // 12. z!hapis
+    // 12. .hapis
     else if (command === 'hapis') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
-        const reason = args.slice(1).join(' ') || 'Səbəb yoxdur';
-        message.reply(`🔒 **${member.user.tag}** hapse atıldı. Səbəb: ${reason}`);
+        if (!member) return message.reply('⚠️ Lütfen üyeyi etiketleyin.');
+        const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
+        message.reply(`🔒 **${member.user.tag}** hapishaneye gönderildi. Sebep: ${reason}`);
     }
 
-    // 13. z!hapis-kaldır
+    // 13. .hapis-kaldır
     else if (command === 'hapis-kaldır') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
-        if (!member) return message.reply('İstifadəçini qeyd edin.');
-        message.reply(`🔓 **${member.user.tag}** hapisten çıxarıldı.`);
+        if (!member) return message.reply('⚠️ Lütfen üyeyi etiketleyin.');
+        message.reply(`🔓 **${member.user.tag}** hapishaneden çıkarıldı.`);
     }
 
-    // 14. z!snipe
+    // 14. .snipe
     else if (command === 'snipe') {
         const sniped = snipeMap.get(message.channel.id);
-        if (!sniped) return message.reply('Bu kanalda silinən son mesaj tapılmadı.');
+        if (!sniped) return message.reply('❌ Bu kanalda silinen son mesaj bulunamadı.');
         const embed = new EmbedBuilder()
-            .setTitle('🎯 Son Silinən Mesaj')
+            .setTitle('🎯 Son Silinen Mesaj')
             .addFields(
                 { name: 'Yazan', value: sniped.author, inline: true },
                 { name: 'Mesaj', value: sniped.content, inline: false }
@@ -318,73 +317,73 @@ client.once('ready', async () => {
         message.reply({ embeds: [embed] });
     }
 
-    // 15. z!rol-ver
+    // 15. .rol-ver
     else if (command === 'rol-ver') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
         const role = message.mentions.roles.first();
-        if (!member || !role) return message.reply('İstifadəçi və rol qeyd edin.');
+        if (!member || !role) return message.reply('⚠️ Lütfen bir üye ve rol etiketleyin.');
         await member.roles.add(role);
-        message.reply(`✅ **${member.user.tag}** istifadəçisinə **${role.name}** rolü verildi.`);
+        message.reply(`✅ **${member.user.tag}** adlı kullanıcıya **${role.name}** rolü verildi.`);
     }
 
-    // 16. z!rol-al
+    // 16. .rol-al
     else if (command === 'rol-al') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Yetkiniz yok.');
         const member = message.mentions.members.first();
         const role = message.mentions.roles.first();
-        if (!member || !role) return message.reply('İstifadəçi və rol qeyd edin.');
+        if (!member || !role) return message.reply('⚠️ Lütfen bir üye ve rol etiketleyin.');
         await member.roles.remove(role);
-        message.reply(`✅ **${member.user.tag}** istifadəçisindən **${role.name}** rolü alındı.`);
+        message.reply(`✅ **${member.user.tag}** adlı kullanıcıdan **${role.name}** rolü alındı.`);
     }
 
-    // 17. z!rol-oluştur
+    // 17. .rol-oluştur
     else if (command === 'rol-oluştur') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Yetkiniz yok.');
         const roleName = args.join(' ');
-        if (!roleName) return message.reply('Rol adı qeyd edin.');
+        if (!roleName) return message.reply('⚠️ Lütfen rol adı girin.');
         const role = await message.guild.roles.create({ name: roleName });
-        message.reply(`✅ Uğurla **${role.name}** adlı rol yaradıldı.`);
+        message.reply(`✅ Başarıyla **${role.name}** adlı rol oluşturuldu.`);
     }
 
-    // 18. z!yavaş-mod
+    // 18. .yavaş-mod
     else if (command === 'yavaş-mod' || command === 'slowmode') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ Yetkiniz yok.');
         const time = parseInt(args[0]);
-        if (isNaN(time)) return message.reply('Saniyə qeyd edin (məs: 5).');
+        if (isNaN(time)) return message.reply('⚠️ Lütfen saniye türünden bir sayı girin (Örn: 5).');
         await message.channel.setRateLimitPerUser(time);
-        message.reply(`⏳ Kanalın yavaş modu **${time}** saniyə olaraq təyin edildi.`);
+        message.reply(`⏳ Kanalın yavaş modu **${time}** saniye olarak ayarlandı.`);
     }
 
-    // 19. z!yaz
+    // 19. .yaz
     else if (command === 'yaz') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('Yetkiniz yoxdur.');
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yetkiniz yok.');
         const text = args.join(' ');
-        if (!text) return message.reply('Yazılacaq mətni qeyd edin.');
+        if (!text) return message.reply('⚠️ Lütfen yazılacak metni belirtin.');
         await message.delete().catch(() => {});
         message.channel.send(text);
     }
 
-    // 20. z!sunucubilgi
+    // 20. .sunucubilgi
     else if (command === 'sunucubilgi') {
         const { guild } = message;
         const embed = new EmbedBuilder()
-            .setTitle(`📊 ${guild.name}`)
+            .setTitle(`📊 ${guild.name} - Sunucu Bilgisi`)
             .setThumbnail(guild.iconURL({ dynamic: true }))
             .addFields(
-                { name: '👑 Sahib ID', value: `${guild.ownerId}`, inline: true },
-                { name: '👥 Üzv Sayı', value: `${guild.memberCount}`, inline: true }
+                { name: '👑 Sahip ID', value: `${guild.ownerId}`, inline: true },
+                { name: '👥 Üye Sayısı', value: `${guild.memberCount}`, inline: true }
             )
             .setColor('#38bdf8')
             .setTimestamp();
         message.reply({ embeds: [embed] });
     }
 
-    // 21. z!avatar
+    // 21. .avatar
     else if (command === 'avatar') {
         const user = message.mentions.users.first() || message.author;
         const embed = new EmbedBuilder()
-            .setTitle(`🖼️ ${user.username}`)
+            .setTitle(`🖼️ ${user.username} - Profil Fotoğrafı`)
             .setImage(user.displayAvatarURL({ size: 1024, dynamic: true }))
             .setColor('#ec4899');
         message.reply({ embeds: [embed] });
@@ -392,4 +391,4 @@ client.once('ready', async () => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-                                            
+                    
