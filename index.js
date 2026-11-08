@@ -43,9 +43,7 @@ const LOG_TARGET_ID = '1375956621229821992'; // EFENDİM log ID-si
 const snipeMap = new Map();
 const warnsMap = new Map();
 const floodMap = new Map();
-
-// Sörver tənzimləmələrini yadda saxlamaq üçün (Jail rolları, link istisnaları)
-const serverSettings = new Map(); // guildId -> { jailRoleId, jailAuthRoleId, memberRoleId, exceptionChannelId }
+const serverSettings = new Map(); // Sunucu tənzimləmələri
 
 // küfürler.json faylından oxuma/yazma mexanizmi
 const kufurFilePath = path.join(__dirname, 'küfürler.json');
@@ -107,7 +105,7 @@ client.once('ready', async () => {
         }
     }, 2 * 60 * 1000);
 });
-        client.on('messageCreate', async (message) => {
+            client.on('messageCreate', async (message) => {
     try {
         if (message.author.bot || !message.guild) return;
 
@@ -189,18 +187,17 @@ client.once('ready', async () => {
             return;
         }
 
-        // --- 5. LİNK İSTİSNA KANALI AYARLA (.linkistisna #kanal) ---
+        // --- 5. LİNK İSTİSNA KANALI (.linkistisna #kanal) ---
         if (command === 'linkistisna') {
             if (!isAdmin) return message.reply('❌ Yetkiniz yok.');
             const channel = message.mentions.channels.first();
-            if (!channel) return message.reply('⚠️ Lütfen bir kanal etiketleyin (Örn: `.linkistisna #chat`).');
-            
+            if (!channel) return message.reply('⚠️ Lütfen bir kanal etiketleyin (`.linkistisna #kanal`).');
             settings.exceptionChannelId = channel.id;
             message.reply(`✅ Başarılı! Artık <#${channel.id}> kanalında serbestçe link paylaşılabilecek.`);
             return;
         }
 
-        // --- 6. JAIL VE ROL AYARLARI ---
+        // --- 6. ROL VE JAIL AYARLARI ---
         if (command === 'jailrol') {
             if (!isAdmin) return message.reply('❌ Yetkiniz yok.');
             const roleId = args[0];
@@ -226,8 +223,8 @@ client.once('ready', async () => {
             settings.memberRoleId = role.id;
             message.reply(`✅ Otomatik üye rolü ayarlandı.`);
             return;
-    }
-                // --- 7. MODERASYON: BAN & UNBAN ---
+            }
+                // --- 7. MODERASYON: BAN & UNBAN (EFENDİM LOGLU) ---
         if (command === 'ban') {
             if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ `Üyeleri Yasakla` yetkiniz yok.');
             const member = message.mentions.members.first();
@@ -236,7 +233,7 @@ client.once('ready', async () => {
 
             await member.ban({ reason });
             message.reply(`✅ Başarıyla **${member.user.tag}** sunucudan yasaklandı.`);
-            sendEfendiLog(`**${member.user.tag}** adlı kişi **${message.author.tag}** tarafından banlandı! Sebep: ${reason}`);
+            sendEfendiLog(`**${member.user.tag}** adlı kullanıcı **${message.author.tag}** tarafından banlandı! Sebep: ${reason}`);
             return;
         }
 
@@ -255,7 +252,7 @@ client.once('ready', async () => {
         if (command === 'mute' || command === 'timeout') {
             if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
             const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Üye etiketleyin (`.mute @üye 10m`).');
+            if (!member) return message.reply('⚠️ Üye etiketleyin (`.mute @üye <dakika>`).');
             const duration = args[1];
             if (!duration || !ms(duration)) return message.reply('⚠️ Geçerli bir süre yazın (Örn: 10m, 2h, 1d).');
             const reason = args.slice(2).join(' ') || 'Sebep yok';
@@ -381,7 +378,42 @@ client.once('ready', async () => {
             return;
         }
 
-        // --- 13. DİĞERLERİ (.snipe, .yavaş-mod, .avatar) ---
+        // --- 13. GELİŞMİŞ SUNUCUBİLGİ (Sunucu PP, Rol Sayısı, Sahip Etiketi ve Üye Listesi Butonu) ---
+        if (command === 'sunucubilgi') {
+            const { guild } = message;
+            const owner = await guild.fetchOwner();
+            const roleCount = guild.roles.cache.size;
+
+            const embed = new EmbedBuilder()
+                .setTitle(`📊 ${guild.name} - Sunucu Bilgisi`)
+                .setThumbnail(guild.iconURL({ dynamic: true }))
+                .addFields(
+                    { name: '👑 Sunucu Sahibi', value: `<@${owner.id}>`, inline: true },
+                    { name: '👥 Üye Sayısı', value: `${guild.memberCount}`, inline: true },
+                    { name: '🛡️ Rol Sayısı', value: `${roleCount}`, inline: true }
+                )
+                .setColor('#38bdf8')
+                .setTimestamp();
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('show_members').setLabel('📋 Üyeleri Göster').setStyle(ButtonStyle.Primary)
+            );
+
+            const sentMsg = await message.reply({ embeds: [embed], components: [row] });
+            const collector = sentMsg.createMessageComponentCollector({ time: 30000 });
+
+            collector.on('collect', async i => {
+                if (i.user.id !== message.author.id) {
+                    return i.reply({ content: '❌ Bu butonu sadece komutu yazan kullanabilir!', ephemeral: true });
+                }
+                const membersList = guild.members.cache.map(m => m.user.tag).join(', ');
+                const text = membersList.length > 1900 ? membersList.substring(0, 1900) + '...' : membersList;
+                await i.reply({ content: `📋 **Sunucu Üyeleri:**\n\`\`\`${text}\`\`\``, ephemeral: true });
+            });
+            return;
+        }
+
+        // --- 14. DİĞERLERİ (.snipe, .yavaş-mod, .avatar, .yardim) ---
         if (command === 'snipe') {
             const sniped = snipeMap.get(message.channel.id);
             if (!sniped) return message.reply('❌ Bu kanalda silinen son mesaj yok.');
@@ -414,7 +446,6 @@ client.once('ready', async () => {
             return;
         }
 
-        // --- 14. YARDIM MENÜSÜ ---
         if (command === 'yardim' || command === 'help') {
             const embed = new EmbedBuilder()
                 .setTitle('📖 ASTROL Yardım Menüsü')
@@ -422,7 +453,7 @@ client.once('ready', async () => {
                 .addFields(
                     { name: 'Moderasyon', value: '`.ban`, `.unban`, `.kick`, `.mute`, `.unmute`, `.warn`, `.warnings`, `.clearwarns`', inline: false },
                     { name: 'Jail & Rol', value: '`.jail`, `.unjail`, `.jailrol`, `.jailytrol`, `.üyerol`, `.rolver`, `.rolal`', inline: false },
-                    { name: 'Koruma & Sistem', value: '`.küfür-ekle`, `.küfür-sil`, `.linkistisna`, `.özelodasetup`, `.yavaş-mod`, `.snipe`', inline: false }
+                    { name: 'Sistem & Bilgi', value: '`.küfür-ekle`, `.küfür-sil`, `.linkistisna`, `.özelodasetup`, `.sunucubilgi`, `.snipe`, `.yavaş-mod`', inline: false }
                 )
                 .setColor('#38bdf8')
                 .setTimestamp();
