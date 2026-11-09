@@ -175,8 +175,22 @@ client.on('messageCreate', async (message) => {
     }
     const member = message.mentions.members.first();
     if (!member) return message.reply('❌ Kullanıcı etiketle: `.ban @kişi [sebep]`');
-    if (!member.bannable) return message.reply('❌ Bu kullanıcıyı banlayamıyorum.');
+    
+    if (!member.bannable) {
+      return message.reply('Bot gardaşıma ban atamam');
+    }
+
     const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
+    
+    // Banlanan kişiye DM
+    const dmEmbed = new EmbedBuilder()
+      .setTitle('Kaçaman Kurtulaman Kıbrıs Polisi')
+      .setDescription(`**Sunucu:** ${message.guild.name}\n**Banlayan:** ${message.author.tag}\n**Sebep:** ${reason}`)
+      .setColor(0xff0000)
+      .setTimestamp();
+    
+    await member.send({ embeds: [dmEmbed] }).catch(() => {});
+
     await member.ban({ reason });
     await message.reply(`✅ **${member.user.tag}** banlandı.\nSebep: ${reason}`);
     efendimLog(message.guild, 'BAN', `**Kullanıcı:** \( {member.user.tag} ( \){member.id})\n**Moderatör:** ${message.author.tag}\n**Sebep:** ${reason}`, 0xff0000);
@@ -203,6 +217,11 @@ client.on('messageCreate', async (message) => {
     }
     const member = message.mentions.members.first();
     if (!member) return message.reply('❌ Kullanıcı etiketle: `.mute @üye <süre> [sebep]` (örnek: 10m, 2h, 1d)');
+    
+    if (!member.moderatable) {
+      return message.reply('Bot gardaşıma mute atamam');
+    }
+
     const time = args[1];
     if (!time) return message.reply('❌ Süre yaz (örnek: 10m, 2h, 1d)');
     const duration = ms(time);
@@ -230,7 +249,11 @@ client.on('messageCreate', async (message) => {
     }
     const member = message.mentions.members.first();
     if (!member) return message.reply('❌ Kullanıcı etiketle.');
-    if (!member.kickable) return message.reply('❌ Bu kullanıcıyı atamıyorum.');
+    
+    if (!member.kickable) {
+      return message.reply('Bot gardaşıma kick atamam');
+    }
+
     const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
     await member.kick(reason);
     await message.reply(`✅ **${member.user.tag}** sunucudan atıldı.\nSebep: ${reason}`);
@@ -276,8 +299,8 @@ client.on('messageCreate', async (message) => {
     if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
     saveJSON('warns.json', warns);
     message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
-}
-    // ====================== JAIL SİSTEMİ ======================
+            }
+  // ====================== JAIL SİSTEMİ ======================
   if (command === 'jail') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       return message.reply('❌ Bu komutu kullanmak için yetkin yok.');
@@ -285,6 +308,13 @@ client.on('messageCreate', async (message) => {
     if (!config.jailRole) return message.reply('❌ Önce `.jailrol <rol ID>` ile jail rolünü ayarla.');
     const member = message.mentions.members.first();
     if (!member) return message.reply('❌ Kullanıcı etiketle.');
+
+    // Rol hiyerarşisi kontrolü
+    const botMember = message.guild.members.me;
+    if (member.roles.highest.position >= botMember.roles.highest.position) {
+      return message.reply('Bot gardaşıma jail atamam');
+    }
+
     await member.roles.set([config.jailRole]);
     await message.reply(`🔒 **${member.user.tag}** jail'e atıldı.`);
     efendimLog(message.guild, 'JAIL', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}`, 0x8b0000);
