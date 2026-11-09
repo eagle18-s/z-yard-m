@@ -956,6 +956,50 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
   }
 });
+// ====================== EMBED OLUŞTURMA ======================
+  if (command === 'embed') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
 
+    if (args.length < 2) {
+      return message.reply('❌ Doğru kullanım:\n`.embed <başlık> <mesaj> [resim linki]`\n\nÖrnek:\n`.embed Duyuru Merhaba herkese! https://ornek.com/resim.png`');
+    }
+
+    // Son argüman http ilə başlayırsa şəkil kimi qəbul et
+    let imageUrl = null;
+    let descriptionArgs = [...args];
+
+    if (args[args.length - 1].startsWith('http')) {
+      imageUrl = args[args.length - 1];
+      descriptionArgs = args.slice(0, -1);
+    }
+
+    const title = descriptionArgs[0];
+    const description = descriptionArgs.slice(1).join(' ');
+
+    if (!description) {
+      return message.reply('❌ Mesaj (açıklama) kısmını da yazmalısın.');
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(description)
+      .setColor(0x5865F2)
+      .setTimestamp()
+      .setFooter({ text: `Gönderen: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() });
+
+    if (imageUrl) {
+      embed.setImage(imageUrl);
+    }
+
+    try {
+      await message.channel.send({ embeds: [embed] });
+      // İstəyə görə əmri silmək üçün:
+      // await message.delete().catch(() => {});
+    } catch (err) {
+      message.reply('❌ Embed gönderilemedi.');
+    }
+  }
 // ====================== LOGIN ======================
 client.login(process.env.DISCORD_TOKEN);
