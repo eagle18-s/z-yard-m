@@ -299,7 +299,7 @@ client.on('messageCreate', async (message) => {
     if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
     saveJSON('warns.json', warns);
     message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
-            }
+          }
   // ====================== JAIL SİSTEMİ ======================
   if (command === 'jail') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
