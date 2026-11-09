@@ -318,7 +318,7 @@ client.on('messageCreate', async (message) => {
     } catch (err) {
       message.reply('❌ Kanal açılırken bir hata oluştu.');
     }
-           }
+    }
   // ====================== KANAL YARAT / SİL ======================
   if (command === 'kanal-yarat') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -486,6 +486,49 @@ client.on('messageCreate', async (message) => {
     }
   }
 
+  // ====================== EMBED OLUŞTURMA ======================
+  if (command === 'embed') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    if (args.length < 2) {
+      return message.reply('❌ Doğru kullanım:\n`.embed <başlık> <mesaj> [resim linki]`\n\nÖrnek:\n`.embed Duyuru Merhaba herkese! https://ornek.com/resim.png`');
+    }
+
+    let imageUrl = null;
+    let descriptionArgs = [...args];
+
+    if (args[args.length - 1].startsWith('http')) {
+      imageUrl = args[args.length - 1];
+      descriptionArgs = args.slice(0, -1);
+    }
+
+    const title = descriptionArgs[0];
+    const description = descriptionArgs.slice(1).join(' ');
+
+    if (!description) {
+      return message.reply('❌ Mesaj (açıklama) kısmını da yazmalısın.');
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(description)
+      .setColor(0x5865F2)
+      .setTimestamp()
+      .setFooter({ text: `Gönderen: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() });
+
+    if (imageUrl) {
+      embed.setImage(imageUrl);
+    }
+
+    try {
+      await message.channel.send({ embeds: [embed] });
+    } catch (err) {
+      message.reply('❌ Embed gönderilemedi.');
+    }
+  }
+
   // ====================== MODERASYON ======================
   if (command === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
@@ -575,7 +618,7 @@ client.on('messageCreate', async (message) => {
     await member.kick(reason);
     await message.reply(`✅ **${member.user.tag}** sunucudan atıldı.\nSebep: ${reason}`);
     efendimLog(message.guild, 'KICK', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}\n**Sebep:** ${reason}`, 0xff5500);
-        }
+      }
   // ====================== UYARI SİSTEMİ ======================
   if (command === 'warn') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -869,6 +912,7 @@ client.on('messageCreate', async (message) => {
 \`.kanal-yarat <ad> <herkeseaçık/kilitli>\`
 \`.kanal-sil #kanal\`
 \`.mesaj-gönder #kanal <mesaj>\`
+\`.embed <başlık> <mesaj> [resim]\`
 \`.katıl #seskanalı\`
 \`.çık-kanal\`
           `);
@@ -904,6 +948,7 @@ client.on('messageCreate', async (message) => {
 \`.kanal-sil #kanal\`
 \`.stiker-çek\`
 \`.mesaj-gönder #kanal <mesaj>\`
+\`.embed <başlık> <mesaj> [resim]\`
 \`.katıl #seskanalı\`
 \`.çık-kanal\`
 \`.yardim\`
@@ -956,50 +1001,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
   }
 });
-// ====================== EMBED OLUŞTURMA ======================
-  if (command === 'embed') {
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
-    }
 
-    if (args.length < 2) {
-      return message.reply('❌ Doğru kullanım:\n`.embed <başlık> <mesaj> [resim linki]`\n\nÖrnek:\n`.embed Duyuru Merhaba herkese! https://ornek.com/resim.png`');
-    }
-
-    // Son argüman http ilə başlayırsa şəkil kimi qəbul et
-    let imageUrl = null;
-    let descriptionArgs = [...args];
-
-    if (args[args.length - 1].startsWith('http')) {
-      imageUrl = args[args.length - 1];
-      descriptionArgs = args.slice(0, -1);
-    }
-
-    const title = descriptionArgs[0];
-    const description = descriptionArgs.slice(1).join(' ');
-
-    if (!description) {
-      return message.reply('❌ Mesaj (açıklama) kısmını da yazmalısın.');
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(description)
-      .setColor(0x5865F2)
-      .setTimestamp()
-      .setFooter({ text: `Gönderen: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() });
-
-    if (imageUrl) {
-      embed.setImage(imageUrl);
-    }
-
-    try {
-      await message.channel.send({ embeds: [embed] });
-      // İstəyə görə əmri silmək üçün:
-      // await message.delete().catch(() => {});
-    } catch (err) {
-      message.reply('❌ Embed gönderilemedi.');
-    }
-  }
 // ====================== LOGIN ======================
 client.login(process.env.DISCORD_TOKEN);
