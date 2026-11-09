@@ -1,561 +1,598 @@
-const { 
-    Client, 
-    GatewayIntentBits, 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle,
-    PermissionFlagsBits,
-    ChannelType 
-} = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType } = require('discord.js');
 const express = require('express');
+const ms = require('ms');
 const fs = require('fs');
 const path = require('path');
-const ms = require('ms');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
-app.use(express.static(__dirname));
-
-app.get('/', (req, res) => {
-    res.send('<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>ASTROL Bot</title></head><body style="background:#0f172a;color:#fff;text-align:center;padding-top:100px;"><h1>🤖 ASTROL Bot 7/24 Aktif!</h1></body></html>');
-});
-
-app.listen(PORT, () => {
-    console.log(`[SERVER]: Web Sunucusu ${PORT} portunda aktif.`);
-});
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates
-    ]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.DirectMessages
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
 const PREFIX = '.';
-const ADMIN_ID = '1561721639518081105'; // Keep-alive üçün ID-n
-const LOG_TARGET_ID = '1375956621229821992'; // EFENDİM log ID-si
+const EFENDIM_ID = '1375956621229821992';
+const PING_ADMIN_ID = '1561721639518081105';
+const DATA_DIR = path.join(__dirname, 'data');
 
-const snipeMap = new Map();
-const warnsMap = new Map();
-const floodMap = new Map();
-const serverSettings = new Map(); // Sunucu tənzimləmələri
+// ====================== DATA HELPERS ======================
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
-// küfürler.json faylından oxuma/yazma mexanizmi
-const kufurFilePath = path.join(__dirname, 'küfürler.json');
-
-function getBadWords() {
-    try {
-        if (!fs.existsSync(kufurFilePath)) {
-            fs.writeFileSync(kufurFilePath, JSON.stringify(['amk', 'aq', 'orospu', 'sik', 'piç', 'ananı'], null, 2));
-        }
-        const data = fs.readFileSync(kufurFilePath, 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        return ['amk', 'aq'];
-    }
+function loadJSON(file, def = {}) {
+  const p = path.join(DATA_DIR, file);
+  if (!fs.existsSync(p)) {
+    fs.writeFileSync(p, JSON.stringify(def, null, 2));
+    return def;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch {
+    return def;
+  }
 }
 
-function saveBadWords(words) {
-    try {
-        fs.writeFileSync(kufurFilePath, JSON.stringify(words, null, 2));
-    } catch (err) {
-        console.error('[JSON ERROR]:', err);
-    }
+function saveJSON(file, data) {
+  fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
 }
 
-async function sendEfendiLog(text) {
-    try {
-        const targetUser = await client.users.fetch(LOG_TARGET_ID).catch(() => null);
-        if (targetUser) {
-            await targetUser.send(`EFENDİM, ${text}`);
-        }
-    } catch (err) {
-        console.error('[LOG ERROR]:', err);
-    }
+let küfürler = [];
+try {
+  küfürler = JSON.parse(fs.readFileSync('./küfürler.json', 'utf8'));
+} catch {
+  küfürler = [];
 }
 
-client.on('messageDelete', message => {
-    if (message.author && !message.author.bot && message.guild) {
-        snipeMap.set(message.channel.id, {
-            content: message.content || '[Fotoğraf veya Dosya]',
-            author: message.author.tag,
-            image: message.attachments.first() ? message.attachments.first().url : null,
-            time: new Date()
-        });
+function saveKüfürler() {
+  fs.writeFileSync('./küfürler.json', JSON.stringify(küfürler, null, 2));
+}
+
+let config = loadJSON('config.json', {
+  linkExceptions: [],
+  jailRole: null,
+  jailYetkiliRol: null,
+  üyeRol: null,
+  özelOdaCategory: null,
+  özelOdaSetupChannel: null
+});
+
+let warns = loadJSON('warns.json', {});
+let lastDeleted = loadJSON('snipe.json', {});
+
+// Spam koruması
+const spamMap = new Map();
+
+// ====================== EFENDİM LOG ======================
+async function efendimLog(guild, title, description, color = 0x2b2d31) {
+  const embed = new EmbedBuilder()
+    .setTitle(`EFENDİM | ${title}`)
+    .setDescription(description)
+    .setColor(color)
+    .setTimestamp()
+    .setFooter({ text: `Sunucu: ${guild.name}` });
+
+  const logChannel = guild.channels.cache.find(c => c.name.includes('log') || c.name.includes('mod-log'));
+  if (logChannel) {
+    logChannel.send({ embeds: [embed] }).catch(() => {});
+  }
+
+  try {
+    const user = await client.users.fetch(EFENDIM_ID);
+    await user.send({ embeds: [embed] });
+  } catch (e) {
+    console.log('EFENDİM DM gönderilemedi:', e.message);
+  }
+}
+
+// ====================== EXPRESS + KEEP ALIVE ======================
+const app = express();
+app.get('/', (req, res) => {
+  res.send(`ASTROL Bot aktif | ${new Date().toLocaleString('tr-TR')}`);
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Web sunucu ${PORT} portunda çalışıyor`));
+
+setInterval(async () => {
+  const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      console.log(`[Keep-Alive] Başarılı ping → ${url}`);
+      try {
+        const admin = await client.users.fetch(PING_ADMIN_ID);
+        await admin.send(`✅ **ASTROL Keep-Alive**\nBaşarılı ping atıldı.\nZaman: <t:${Math.floor(Date.now() / 1000)}:F>`);
+      } catch {}
     }
+  } catch (err) {
+    console.log('[Keep-Alive] Hata:', err.message);
+  }
+}, 2 * 60 * 1000);
+
+// ====================== BOT READY ======================
+client.once('ready', () => {
+  console.log(`✅ ${client.user.tag} aktif!`);
+  client.user.setActivity('ASTROL | .yardim', { type: 3 });
 });
 
-client.once('ready', async () => {
-    console.log(`[BOT]: ${client.user.tag} olarak giriş yapıldı!`);
-
-    setInterval(async () => {
-        try {
-            await fetch('https://zyardim.onrender.com/');
-            const adminUser = await client.users.fetch(ADMIN_ID).catch(() => null);
-            if (adminUser) {
-                await adminUser.send('🟢 **ASTROL Bot Keep-Alive:** Site kontrol edildi.');
-            }
-        } catch (err) {
-            console.error('[KEEP-ALIVE HATA]:', err.message);
-        }
-    }, 2 * 60 * 1000);
-});
-// ASTROL Səsli Özəl Otaq Sistemi Dinləyicisi (Sonsuz sistem)
-client.on('voiceStateUpdate', async (oldState, newState) => {
-    const guildId = newState.guild.id;
-    const settings = serverSettings.get(guildId);
-    if (!settings || !settings.privateVoiceChannelId) return;
-
-    // Əgər istifadəçi "Odayı Oluştur" kanalına qoşulubsa
-    if (newState.channelId === settings.privateVoiceChannelId) {
-        try {
-            const member = newState.member;
-            const channelName = `🔒 ${member.user.username} Odası`;
-            
-            const parentCategory = newState.channel.parent;
-            const createdChannel = await newState.guild.channels.create({
-                name: channelName,
-                type: ChannelType.GuildVoice,
-                parent: parentCategory ? parentCategory.id : null,
-                permissionOverwrites: [
-                    {
-                        id: member.id,
-                        allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
-                    }
-                ]
-            });
-
-            await member.voice.setChannel(createdChannel);
-
-            // Otaq boş qalanda avtomatik silinməsi üçün izləmə
-            const checkEmpty = client.on('voiceStateUpdate', (o, n) => {
-                if (createdChannel.members.size === 0) {
-                    createdChannel.delete().catch(() => {});
-                }
-            });
-        } catch (err) {
-            console.error('[ÖZEL ODA HATA]:', err);
-        }
-    }
-});
-
+// ====================== MESSAGE CREATE ======================
 client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild) return;
+
+  // ===== Küfür Engel =====
+  const contentLower = message.content.toLowerCase();
+  if (küfürler.some(k => contentLower.includes(k.toLowerCase()))) {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      await message.delete().catch(() => {});
+      const warnMsg = await message.channel.send(`${message.author}, küfür yasaktır!`);
+      setTimeout(() => warnMsg.delete().catch(() => {}), 4000);
+      return;
+    }
+  }
+
+  // ===== Link Engel =====
+  const linkRegex = /(https?:\/\/[^\s]+)|(discord\.gg\/[^\s]+)|(discordapp\.com\/invite\/[^\s]+)/gi;
+  if (linkRegex.test(message.content) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+    if (!config.linkExceptions.includes(message.channel.id)) {
+      await message.delete().catch(() => {});
+      const warnMsg = await message.channel.send(`${message.author}, bu kanalda link göndermek yasaktır!`);
+      setTimeout(() => warnMsg.delete().catch(() => {}), 4000);
+      return;
+    }
+  }
+
+  // ===== Spam / Flood =====
+  const key = `\( {message.author.id}- \){message.guild.id}`;
+  const now = Date.now();
+  if (!spamMap.has(key)) spamMap.set(key, []);
+  const timestamps = spamMap.get(key).filter(t => now - t < 5000);
+  timestamps.push(now);
+  spamMap.set(key, timestamps);
+
+  if (timestamps.length >= 6) {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      await message.member.timeout(30 * 1000, 'Spam / Flood').catch(() => {});
+      await message.channel.send(`${message.author} spam yaptığı için 30 saniye timeout yedi.`).catch(() => {});
+      spamMap.set(key, []);
+    }
+  }
+
+  if (!message.content.startsWith(PREFIX)) return;
+
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  // ====================== MODERASYON ======================
+  if (command === 'ban') {
+    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Ban Members** yetkisine sahip olmalısın.');
+    }
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle: `.ban @kişi [sebep]`');
+    if (!member.bannable) return message.reply('❌ Bu kullanıcıyı banlayamıyorum.');
+    const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
+    await member.ban({ reason });
+    await message.reply(`✅ **${member.user.tag}** banlandı.\nSebep: ${reason}`);
+    efendimLog(message.guild, 'BAN', `**Kullanıcı:** \( {member.user.tag} ( \){member.id})\n**Moderatör:** ${message.author.tag}\n**Sebep:** ${reason}`, 0xff0000);
+  }
+
+  if (command === 'unban') {
+    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Ban Members** yetkisine sahip olmalısın.');
+    }
+    const id = args[0];
+    if (!id) return message.reply('❌ Kullanıcı ID yaz: `.unban 123456789`');
     try {
-        if (message.author.bot || !message.guild) return;
-
-        const guildId = message.guild.id;
-        if (!serverSettings.has(guildId)) {
-            serverSettings.set(guildId, { jailRoleId: null, jailAuthRoleId: null, memberRoleId: null, exceptionChannelId: null, privateVoiceChannelId: null });
-        }
-        const settings = serverSettings.get(guildId);
-
-        const contentLower = message.content.toLowerCase();
-        const isAdmin = message.member.permissions.has(PermissionFlagsBits.Administrator);
-
-        // --- 1. KÜFÜR ENGEL (küfürler.json) ---
-        const badWords = getBadWords();
-        const hasBadWord = badWords.some(word => contentLower.includes(word));
-        if (hasBadWord && !isAdmin) {
-            await message.delete().catch(() => {});
-            const wMsg = await message.channel.send(`⚠️ <@${message.author.id}>, bu sunucuda küfür etmek yasaktır!`);
-            setTimeout(() => wMsg.delete().catch(() => {}), 4000);
-            return;
-        }
-
-        // --- 2. LİNK / DAVET ENGEL & İSTİSNA KANALI ---
-        const isExceptionChannel = settings.exceptionChannelId && message.channel.id === settings.exceptionChannelId;
-        const hasLink = contentLower.includes('http://') || contentLower.includes('https://') || contentLower.includes('discord.gg');
-        
-        if (hasLink && !isAdmin && !isExceptionChannel) {
-            await message.delete().catch(() => {});
-            const lMsg = await message.channel.send(`⚠️ <@${message.author.id}>, bu kanalda link paylaşımı yasaktır!`);
-            setTimeout(() => lMsg.delete().catch(() => {}), 4000);
-            return;
-        }
-
-        // --- 3. FLOOD / SPAM KORUMASI ---
-        const userTimeouts = floodMap.get(message.author.id) || [];
-        const currentTime = Date.now();
-        const recentMessages = userTimeouts.filter(t => currentTime - t < 4000);
-        
-        if (recentMessages.length >= 4 && !isAdmin) {
-            floodMap.set(message.author.id, [...recentMessages, currentTime]);
-            await message.delete().catch(() => {});
-            const sMsg = await message.channel.send(`⚠️ <@${message.author.id}>, lütfen ard arda aynı şeyi yazmayın (Flood koruması)!`);
-            setTimeout(() => sMsg.delete().catch(() => {}), 4000);
-            return;
-        }
-        recentMessages.push(currentTime);
-        floodMap.set(message.author.id, recentMessages);
-
-        if (!message.content.startsWith(PREFIX)) return;
-
-        const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
-
-        // --- 4. KÜFÜR EKLE / SİL (JSON) ---
-        if (command === 'küfür-ekle' || command === 'küfürekle') {
-            if (!isAdmin) return message.reply('❌ Bu komut için `Yönetici` yetkiniz yok.');
-            const word = args[0] ? args[0].toLowerCase() : null;
-            if (!word) return message.reply('⚠️ Eklenecek sözcüğü yazın.');
-            
-            let words = getBadWords();
-            if (words.includes(word)) return message.reply('⚠️ Bu sözcük zaten listede var.');
-            words.push(word);
-            saveBadWords(words);
-            message.reply(`✅ \`${word}\` küfür listesine başarıyla eklendi.`);
-            return;
-        }
-
-        if (command === 'küfür-sil' || command === 'küfürsil') {
-            if (!isAdmin) return message.reply('❌ Bu komut için `Yönetici` yetkiniz yok.');
-            const word = args[0] ? args[0].toLowerCase() : null;
-            if (!word) return message.reply('⚠️ Silinecek sözcüğü yazın.');
-            
-            let words = getBadWords();
-            const index = words.indexOf(word);
-            if (index === -1) return message.reply('❌ Bu sözcük küfür listesinde bulunamadı.');
-            words.splice(index, 1);
-            saveBadWords(words);
-            message.reply(`✅ \`${word}\` küfür listesinden kaldırıldı.`);
-            return;
-        }
-
-        // --- 5. LİNK İSTİSNA KANALI (.linkistisna #kanal) ---
-        if (command === 'linkistisna') {
-            if (!isAdmin) return message.reply('❌ Yetkiniz yok.');
-            const channel = message.mentions.channels.first();
-            if (!channel) return message.reply('⚠️ Lütfen bir kanal etiketleyin (`.linkistisna #kanal`).');
-            settings.exceptionChannelId = channel.id;
-            message.reply(`✅ Başarılı! Artık <#${channel.id}> kanalında serbestçe link paylaşılabilecek.`);
-            return;
-        }
-
-        // --- 6. ROL VE JAIL AYARLARI ---
-        if (command === 'jailrol') {
-            if (!isAdmin) return message.reply('❌ Yetkiniz yok.');
-            const roleId = args[0];
-            if (!roleId) return message.reply('⚠️ Rol ID\'si girin.');
-            settings.jailRoleId = roleId;
-            message.reply(`✅ Jail rolü başarıyla ayarlandı.`);
-            return;
-        }
-
-        if (command === 'jailytrol') {
-            if (!isAdmin) return message.reply('❌ Yetkiniz yok.');
-            const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
-            if (!role) return message.reply('⚠️ Geçerli bir rol etiketleyin.');
-            settings.jailAuthRoleId = role.id;
-            message.reply(`✅ Jail yetkili rolü ayarlandı.`);
-            return;
-        }
-
-        if (command === 'üyerol') {
-            if (!isAdmin) return message.reply('❌ Yetkiniz yok.');
-            const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
-            if (!role) return message.reply('⚠️ Geçerli bir üye rolü etiketleyin.');
-            settings.memberRoleId = role.id;
-            message.reply(`✅ Otomatik üye rolü ayarlandı.`);
-            return;
+      await message.guild.members.unban(id);
+      await message.reply(`✅ \`${id}\` ID'li kullanıcının banı kaldırıldı.`);
+      efendimLog(message.guild, 'UNBAN', `**Kullanıcı ID:** ${id}\n**Moderatör:** ${message.author.tag}`, 0x00ff00);
+    } catch {
+      message.reply('❌ Bu ID ile banlı kullanıcı bulunamadı.');
     }
-                // --- 7. MODERASYON: BAN & UNBAN (EFENDİM LOGLU) ---
-        if (command === 'ban') {
-            if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ `Üyeleri Yasakla` yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Lütfen banlanacak kişiyi etiketleyin (`.ban @kişi [sebep]`).');
-            const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
+  }
 
-            await member.ban({ reason });
-            message.reply(`✅ Başarıyla **${member.user.tag}** sunucudan yasaklandı.`);
-            sendEfendiLog(`**${member.user.tag}** adlı kullanıcı **${message.author.tag}** tarafından banlandı! Sebep: ${reason}`);
-            return;
-        }
-
-        if (command === 'unban') {
-            if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ Yetkiniz yok.');
-            const userId = args[0];
-            if (!userId) return message.reply('⚠️ Lütfen kaldırılacak kişinin ID\'sini girin (`.unban ID`).');
-
-            await message.guild.members.unban(userId);
-            message.reply(`✅ ID: ${userId} olan kullanıcının yasağı kaldırıldı.`);
-            sendEfendiLog(`ID: \`${userId}\` olan kullanıcının yasağı **${message.author.tag}** tarafından kaldırıldı.`);
-            return;
-        }
-
-        // --- 8. MUTE & UNMUTE (TIMEOUT) ---
-        if (command === 'mute' || command === 'timeout') {
-            if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Üye etiketleyin (`.mute @üye <dakika>`).');
-            const duration = args[1];
-            if (!duration || !ms(duration)) return message.reply('⚠️ Geçerli bir süre yazın (Örn: 10m, 2h, 1d).');
-            const reason = args.slice(2).join(' ') || 'Sebep yok';
-
-            await member.timeout(ms(duration), reason);
-            message.reply(`✅ **${member.user.tag}** adlı üyeye ${duration} süreyle timeout uygulandı.`);
-            sendEfendiLog(`**${member.user.tag}** adlı üyeye **${message.author.tag}** tarafından ${duration} süreyle timeout atıldı!`);
-            return;
-        }
-
-        if (command === 'unmute' || command === 'untimeout') {
-            if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Üye etiketleyin.');
-
-            await member.timeout(null);
-            message.reply(`✅ **${member.user.tag}** üzerindeki timeout kaldırıldı.`);
-            sendEfendiLog(`**${member.user.tag}** üzerindeki timeout **${message.author.tag}** tarafından kaldırıldı.`);
-            return;
-        }
-
-        // --- 9. KICK & UYARI SİSTEMİ (.warn, .warnings, .clearwarns) ---
-        if (command === 'kick') {
-            if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Atılacak üyeyi etiketleyin.');
-            const reason = args.slice(1).join(' ') || 'Sebep yok';
-
-            await member.kick(reason);
-            message.reply(`✅ **${member.user.tag}** sunucudan atıldı.`);
-            return;
-        }
-
-        if (command === 'warn' || command === 'uyarı') {
-            if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Uyarılacak üyeyi etiketleyin.');
-            const reason = args.slice(1).join(' ') || 'Sebep yok';
-
-            const count = (warnsMap.get(member.id) || 0) + 1;
-            warnsMap.set(member.id, count);
-            message.reply(`✅ **${member.user.tag}** uyarlandı. Toplam uyarı: **${count}**`);
-            return;
-        }
-
-        if (command === 'warnings') {
-            const member = message.mentions.members.first() || message.member;
-            const count = warnsMap.get(member.id) || 0;
-            message.reply(`ℹ️ **${member.user.tag}** adlı kullanıcının toplam uyarı sayısı: **${count}**`);
-            return;
-        }
-
-        if (command === 'clearwarns') {
-            if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Üye etiketleyin.');
-            warnsMap.set(member.id, 0);
-            message.reply(`✅ **${member.user.tag}** adlı kullanıcının uyarıları sıfırlandı.`);
-            return;
-        }
-
-        // --- 10. JAIL & UNJAIL ---
-        if (command === 'jail') {
-            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Hapse atılacak üyeyi etiketleyin.');
-            if (!settings.jailRoleId) return message.reply('⚠️ Önce `.jailrol <rol ID>` komutuyla hapis rolünü ayarlamalısınız!');
-
-            await member.roles.add(settings.jailRoleId);
-            message.reply(`✅ **${member.user.tag}** başarıyla hapse atıldı.`);
-            sendEfendiLog(`**${member.user.tag}** adlı kullanıcı **${message.author.tag}** tarafından hapse atıldı.`);
-            return;
-        }
-
-        if (command === 'unjail') {
-            if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            if (!member) return message.reply('⚠️ Üye etiketleyin.');
-            if (!settings.jailRoleId) return message.reply('⚠️ Hapis rolü ayarlanmamış.');
-
-            await member.roles.remove(settings.jailRoleId);
-            message.reply(`✅ **${member.user.tag}** hapisten çıkarıldı.`);
-            sendEfendiLog(`**${member.user.tag}** adlı kullanıcının hapis cezası **${message.author.tag}** tarafından kaldırıldı.`);
-            return;
-        }
-
-        // --- 11. ROL VER & ROL AL ---
-        if (command === 'rolver' || command === 'rol-ver') {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ `Rolleri Yönet` yetkiniz yok.');
-            const member = message.mentions.members.first();
-            const role = message.mentions.roles.first();
-            if (!member || !role) return message.reply('⚠️ Kullanıcı ve rol etiketleyin (`.rolver @üye @rol`).');
-
-            await member.roles.add(role);
-            message.reply(`✅ **${member.user.tag}** adlı kullanıcıya **${role.name}** rolü verildi.`);
-            return;
-        }
-
-        if (command === 'rolal' || command === 'rol-al') {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Yetkiniz yok.');
-            const member = message.mentions.members.first();
-            const role = message.mentions.roles.first();
-            if (!member || !role) return message.reply('⚠️ Kullanıcı ve rol etiketleyin.');
-
-            await member.roles.remove(role);
-            message.reply(`✅ **${member.user.tag}** adlı kullanıcıdan **${role.name}** rolü alındı.`);
-            return;
-        }
-
-        // --- 12. ÖZEL ODA SETUP (ASTROL SİSTEMİ) ---
-        if (command === 'özelodasetup') {
-            if (!isAdmin) return message.reply('❌ Bu komut için `Yönetici` yetkiniz yok.');
-            const category = await message.guild.channels.create({
-                name: '🔊 ÖZEL ODA SİSTEMİ',
-                type: ChannelType.GuildCategory
-            });
-            const voiceChannel = await message.guild.channels.create({
-                name: '➕ Odayı Oluştur',
-                type: ChannelType.GuildVoice,
-                parent: category.id
-            });
-            settings.privateVoiceChannelId = voiceChannel.id;
-            message.reply(`✅ ASTROL Özel Oda Sistemi başarıyla kuruldu! Kullanıcılar <#${voiceChannel.id}> kanalına girerek kendi odalarını açabilirler.`);
-            return;
-        }
-
-        // --- 13. GELİŞMİŞ SUNUCUBİLGİ (Sunucu PP, Rol Sayısı, Sahip Etiketi ve Üye Listesi Butonu) ---
-        if (command === 'sunucubilgi') {
-            const { guild } = message;
-            const owner = await guild.fetchOwner();
-            const roleCount = guild.roles.cache.size;
-
-            const embed = new EmbedBuilder()
-                .setTitle(`📊 ${guild.name} - Sunucu Bilgisi`)
-                .setThumbnail(guild.iconURL({ dynamic: true }))
-                .addFields(
-                    { name: '👑 Sunucu Sahibi', value: `<@${owner.id}>`, inline: true },
-                    { name: '👥 Üye Sayısı', value: `${guild.memberCount}`, inline: true },
-                    { name: '🛡️ Rol Sayısı', value: `${roleCount}`, inline: true }
-                )
-                .setColor('#38bdf8')
-                .setTimestamp();
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('show_members').setLabel('📋 Üyeleri Göster').setStyle(ButtonStyle.Primary)
-            );
-
-            const sentMsg = await message.reply({ embeds: [embed], components: [row] });
-            const collector = sentMsg.createMessageComponentCollector(); // Sonsuz kollektor
-
-            collector.on('collect', async i => {
-                if (i.user.id !== message.author.id) {
-                    return i.reply({ content: '❌ Bu butonu sadece komutu yazan kullanabilir!', ephemeral: true });
-                }
-                const membersList = guild.members.cache.map(m => m.user.tag).join(', ');
-                const text = membersList.length > 1900 ? membersList.substring(0, 1900) + '...' : membersList;
-                await i.reply({ content: `📋 **Sunucu Üyeleri:**\n\`\`\`${text}\`\`\``, ephemeral: true });
-            });
-            return;
-        }
-
-        // --- 14. DİĞERLERİ (.snipe, .yavaş-mod, .avatar) ---
-        if (command === 'snipe') {
-            const sniped = snipeMap.get(message.channel.id);
-            if (!sniped) return message.reply('❌ Bu kanalda silinen son mesaj yok.');
-            const embed = new EmbedBuilder()
-                .setTitle('🎯 Son Silinen Mesaj')
-                .addFields({ name: 'Yazan', value: sniped.author, inline: true }, { name: 'Mesaj', value: sniped.content, inline: false })
-                .setColor('#8b5cf6')
-                .setTimestamp(sniped.time);
-            if (sniped.image) embed.setImage(sniped.image);
-            message.reply({ embeds: [embed] });
-            return;
-        }
-
-        if (command === 'yavaş-mod' || command === 'slowmode') {
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return message.reply('❌ `Kanalları Yönet` yetkiniz yok.');
-            const sec = parseInt(args[0]);
-            if (isNaN(sec)) return message.reply('⚠️ Saniye türünden sayı girin (Örn: `.yavaş-mod 5`).');
-            await message.channel.setRateLimitPerUser(sec);
-            message.reply(`✅ Kanalın yavaş modu **${sec}** saniye olarak ayarlandı.`);
-            return;
-        }
-
-        if (command === 'avatar') {
-            const user = message.mentions.users.first() || message.author;
-            const embed = new EmbedBuilder()
-                .setTitle(`🖼️ ${user.username} - Avatar`)
-                .setImage(user.displayAvatarURL({ size: 1024, dynamic: true }))
-                .setColor('#ec4899');
-            message.reply({ embeds: [embed] });
-            return;
-        }
-
-        // --- 15. SONSUZ BUTONLU VE KATEGORİLİ .YARDIM MENÜSÜ ---
-        if (command === 'yardim' || command === 'help') {
-            const modEmbed = new EmbedBuilder()
-                .setTitle('📖 ASTROL Yardım - Moderasyon (1/3)')
-                .setDescription('Sunucu ceza ve yönetim komutları:')
-                .addFields(
-                    { name: '`.ban @kişi [sebep]`', value: 'Kişiyi banlar, EFENDİM\'e log atar.', inline: false },
-                    { name: '`.unban ID`', value: 'ID ile banı kaldırır.', inline: false },
-                    { name: '`.mute @üye <süre>`', value: 'Timeout uygular (Örn: 10m, 2h).', inline: false },
-                    { name: '`.unmute @üye`', value: 'Timeout\'u kaldırır.', inline: false },
-                    { name: '`.kick @üye`', value: 'Üyeyi sunucudan atar.', inline: false }
-                )
-                .setColor('#38bdf8')
-                .setFooter({ text: 'Sayfa 1 / 3 - Moderasyon' });
-
-            const jailRoleEmbed = new EmbedBuilder()
-                .setTitle('📖 ASTROL Yardım - Jail & Rol (2/3)')
-                .setDescription('Hapis ve rol komutları:')
-                .addFields(
-                    { name: '`.jail @üye`', value: 'Üyeyi hapis rolüyle izole eder.', inline: false },
-                    { name: '`.unjail @üye`', value: 'Hapis cezasını kaldırır.', inline: false },
-                    { name: '`.jailrol <ID>` / `.jailytrol @rol`', value: 'Jail rollerini ayarlar.', inline: false },
-                    { name: '`.rolver @üye @rol` / `.rolal`', value: 'Rol verip alır.', inline: false },
-                    { name: '`.warn` / `.warnings` / `.clearwarns`', value: 'Uyarı sistemi.', inline: false }
-                )
-                .setColor('#38bdf8')
-                .setFooter({ text: 'Sayfa 2 / 3 - Jail & Rol' });
-
-            const systemEmbed = new EmbedBuilder()
-                .setTitle('📖 ASTROL Yardım - Sistem & Koruma (3/3)')
-                .setDescription('Güvenlik ve yardımcı komutlar:')
-                .addFields(
-                    { name: '`.küfür-ekle` / `.küfür-sil`', value: 'Küfür listesini yönetir.', inline: false },
-                    { name: '`.linkistisna #kanal`', value: 'Kanalda link serbestliği sağlar.', inline: false },
-                    { name: '`.özelodasetup`', value: 'Səsli özəl otaq sistemini qurur.', inline: false },
-                    { name: '`.sunucubilgi` / `.snipe` / `.avatar`', value: 'Bilgi ve eğlence.', inline: false }
-                )
-                .setColor('#38bdf8')
-                .setFooter({ text: 'Sayfa 3 / 3 - Sistem' });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('btn_mod').setLabel('🛡️ Moderasyon').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('btn_jail').setLabel('🔒 Jail & Rol').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('btn_system').setLabel('⚙️ Sistem & Koruma').setStyle(ButtonStyle.Secondary)
-            );
-
-            const sentMsg = await message.reply({ embeds: [modEmbed], components: [row] });
-            const collector = sentMsg.createMessageComponentCollector(); // Sonsuz kollektor (vaxt məhdudiyyəti yoxdur)
-
-            collector.on('collect', async i => {
-                if (i.user.id !== message.author.id) {
-                    return i.reply({ content: '❌ Bu butonları yalnızca komutu yazan kullanıcı kullanabilir!', ephemeral: true });
-                }
-
-                if (i.customId === 'btn_mod') {
-                    await i.update({ embeds: [modEmbed], components: [row] });
-                } else if (i.customId === 'btn_jail') {
-                    await i.update({ embeds: [jailRoleEmbed], components: [row] });
-                } else if (i.customId === 'btn_system') {
-                    await i.update({ embeds: [systemEmbed], components: [row] });
-                }
-            });
-            return;
-        }
-
-    } catch (err) {
-        console.error('[ERROR]:', err);
+  if (command === 'mute' || command === 'timeout') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Timeout Members** yetkisine sahip olmalısın.');
     }
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle: `.mute @üye <süre> [sebep]` (örnek: 10m, 2h, 1d)');
+    const time = args[1];
+    if (!time) return message.reply('❌ Süre yaz (örnek: 10m, 2h, 1d)');
+    const duration = ms(time);
+    if (!duration || duration > 28 * 24 * 60 * 60 * 1000) return message.reply('❌ Geçerli bir süre yaz (maksimum 28 gün).');
+    const reason = args.slice(2).join(' ') || 'Sebep belirtilmedi';
+    await member.timeout(duration, reason);
+    await message.reply(`✅ **${member.user.tag}** ${time} süreliğine timeout yedi.\nSebep: ${reason}`);
+    efendimLog(message.guild, 'MUTE / TIMEOUT', `**Kullanıcı:** ${member.user.tag}\n**Süre:** ${time}\n**Moderatör:** ${message.author.tag}\n**Sebep:** ${reason}`, 0xffaa00);
+  }
+
+  if (command === 'unmute') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Timeout Members** yetkisine sahip olmalısın.');
+    }
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle.');
+    await member.timeout(null);
+    await message.reply(`✅ **${member.user.tag}** timeout'u kaldırıldı.`);
+    efendimLog(message.guild, 'UNMUTE', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}`, 0x00ff00);
+  }
+
+  if (command === 'kick') {
+    if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için **Kick Members** yetkisine sahip olmalısın.');
+    }
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle.');
+    if (!member.kickable) return message.reply('❌ Bu kullanıcıyı atamıyorum.');
+    const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
+    await member.kick(reason);
+    await message.reply(`✅ **${member.user.tag}** sunucudan atıldı.\nSebep: ${reason}`);
+    efendimLog(message.guild, 'KICK', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}\n**Sebep:** ${reason}`, 0xff5500);
+  }
+
+  // ====================== UYARI SİSTEMİ ======================
+  if (command === 'warn') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için yetkin yok.');
+    }
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle.');
+    const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
+    if (!warns[message.guild.id]) warns[message.guild.id] = {};
+    if (!warns[message.guild.id][member.id]) warns[message.guild.id][member.id] = [];
+    warns[message.guild.id][member.id].push({
+      reason,
+      moderator: message.author.tag,
+      date: Date.now()
+    });
+    saveJSON('warns.json', warns);
+    await message.reply(`⚠️ **${member.user.tag}** uyarıldı.\nSebep: \( {reason}\nToplam uyarı: ** \){warns[message.guild.id][member.id].length}**`);
+  }
+
+  if (command === 'warnings') {
+    const member = message.mentions.members.first() || message.member;
+    const list = warns[message.guild.id]?.[member.id] || [];
+    if (list.length === 0) return message.reply(`${member.user.tag} için hiç uyarı bulunmuyor.`);
+    const embed = new EmbedBuilder()
+      .setTitle(`${member.user.tag} - Uyarılar`)
+      .setColor(0xffaa00)
+      .setDescription(list.map((w, i) => `**${i + 1}.** ${w.reason}\nModeratör: \( {w.moderator} • <t: \){Math.floor(w.date / 1000)}:R>`).join('\n\n'));
+    message.reply({ embeds: [embed] });
+  }
+
+  if (command === 'clearwarns') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için yetkin yok.');
+    }
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle.');
+    if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
+    saveJSON('warns.json', warns);
+    message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
+}
+    // ====================== JAIL SİSTEMİ ======================
+  if (command === 'jail') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için yetkin yok.');
+    }
+    if (!config.jailRole) return message.reply('❌ Önce `.jailrol <rol ID>` ile jail rolünü ayarla.');
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle.');
+    await member.roles.set([config.jailRole]);
+    await message.reply(`🔒 **${member.user.tag}** jail'e atıldı.`);
+    efendimLog(message.guild, 'JAIL', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}`, 0x8b0000);
+  }
+
+  if (command === 'unjail') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply('❌ Bu komutu kullanmak için yetkin yok.');
+    }
+    if (!config.üyeRol) return message.reply('❌ Önce `.üyerol @rol` ile normal üye rolünü ayarla.');
+    const member = message.mentions.members.first();
+    if (!member) return message.reply('❌ Kullanıcı etiketle.');
+    await member.roles.set([config.üyeRol]);
+    await message.reply(`🔓 **${member.user.tag}** jail'den çıkarıldı.`);
+    efendimLog(message.guild, 'UNJAIL', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}`, 0x00ff00);
+  }
+
+  if (command === 'jailrol') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
+    const roleId = args[0];
+    if (!roleId) return message.reply('❌ Rol ID yaz.');
+    config.jailRole = roleId;
+    saveJSON('config.json', config);
+    message.reply(`✅ Jail rolü ayarlandı: <@&${roleId}>`);
+  }
+
+  if (command === 'jailytrol') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
+    const role = message.mentions.roles.first();
+    if (!role) return message.reply('❌ Rol etiketle.');
+    config.jailYetkiliRol = role.id;
+    saveJSON('config.json', config);
+    message.reply(`✅ Jail yetkili rolü ayarlandı: ${role}`);
+  }
+
+  if (command === 'üyerol') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
+    const role = message.mentions.roles.first();
+    if (!role) return message.reply('❌ Rol etiketle.');
+    config.üyeRol = role.id;
+    saveJSON('config.json', config);
+    message.reply(`✅ Normal üye rolü ayarlandı: ${role}`);
+  }
+
+  if (command === 'rolver') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Rol yönetme yetkin yok.');
+    const member = message.mentions.members.first();
+    const role = message.mentions.roles.first();
+    if (!member || !role) return message.reply('❌ `.rolver @üye @rol`');
+    await member.roles.add(role);
+    message.reply(`✅ ${member} kullanıcısına ${role} rolü verildi.`);
+  }
+
+  if (command === 'rolal') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) return message.reply('❌ Rol yönetme yetkin yok.');
+    const member = message.mentions.members.first();
+    const role = message.mentions.roles.first();
+    if (!member || !role) return message.reply('❌ `.rolal @üye @rol`');
+    await member.roles.remove(role);
+    message.reply(`✅ ${member} kullanıcısından ${role} rolü alındı.`);
+  }
+
+  // ====================== YARDIMCI KOMUTLAR ======================
+  if (command === 'sil') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+      return message.reply('❌ Mesaj yönetme yetkin yok.');
+    }
+    const amount = parseInt(args[0]);
+    if (isNaN(amount) || amount < 1 || amount > 100) return message.reply('❌ 1-100 arası bir sayı yaz.');
+    await message.channel.bulkDelete(amount + 1, true).catch(() => {});
+    const msg = await message.channel.send(`✅ ${amount} mesaj silindi.`);
+    setTimeout(() => msg.delete().catch(() => {}), 3000);
+  }
+
+  if (command === 'avatar') {
+    const user = message.mentions.users.first() || message.author;
+    const embed = new EmbedBuilder()
+      .setTitle(`${user.tag} avatarı`)
+      .setImage(user.displayAvatarURL({ size: 1024, dynamic: true }))
+      .setColor(0x5865F2);
+    message.reply({ embeds: [embed] });
+  }
+
+  if (command === 'snipe') {
+    const data = lastDeleted[message.channel.id];
+    if (!data) return message.reply('❌ Bu kanalda silinen mesaj bulunamadı.');
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: data.author, iconURL: data.avatar })
+      .setDescription(data.content || '*Metin yok*')
+      .setColor(0x2b2d31)
+      .setFooter({ text: `Silinme zamanı` })
+      .setTimestamp(data.date);
+    if (data.image) embed.setImage(data.image);
+    message.reply({ embeds: [embed] });
+  }
+
+  if (command === 'yavaş-mod' || command === 'slowmode') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      return message.reply('❌ Kanal yönetme yetkin yok.');
+    }
+    const seconds = parseInt(args[0]);
+    if (isNaN(seconds) || seconds < 0 || seconds > 21600) return message.reply('❌ 0-21600 saniye arası bir değer yaz.');
+    await message.channel.setRateLimitPerUser(seconds);
+    message.reply(`✅ Yavaş mod **${seconds}** saniye olarak ayarlandı.`);
+  }
+
+  // ====================== KÜFÜR YÖNETİMİ ======================
+  if (command === 'küfür-ekle') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
+    const word = args.join(' ').toLowerCase();
+    if (!word) return message.reply('❌ Bir kelime yaz.');
+    if (küfürler.includes(word)) return message.reply('❌ Bu kelime zaten listede.');
+    küfürler.push(word);
+    saveKüfürler();
+    message.reply(`✅ \`${word}\` küfür listesine eklendi.`);
+  }
+
+  if (command === 'küfür-sil') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
+    const word = args.join(' ').toLowerCase();
+    if (!word) return message.reply('❌ Bir kelime yaz.');
+    const index = küfürler.indexOf(word);
+    if (index === -1) return message.reply('❌ Bu kelime listede yok.');
+    küfürler.splice(index, 1);
+    saveKüfürler();
+    message.reply(`✅ \`${word}\` küfür listesinden silindi.`);
+  }
+
+  // ====================== LİNK İSTİSNASI ======================
+  if (command === 'linkistisna') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
+    const channel = message.mentions.channels.first() || message.channel;
+    if (config.linkExceptions.includes(channel.id)) {
+      config.linkExceptions = config.linkExceptions.filter(id => id !== channel.id);
+      saveJSON('config.json', config);
+      return message.reply(`✅ ${channel} artık link istisnası değil.`);
+    }
+    config.linkExceptions.push(channel.id);
+    saveJSON('config.json', config);
+    message.reply(`✅ ${channel} link istisnası olarak eklendi.`);
+  }
+
+  // ====================== ÖZEL ODA SETUP ======================
+  if (command === 'özelodasetup') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
+    const category = await message.guild.channels.create({
+      name: 'ÖZEL ODALAR',
+      type: ChannelType.GuildCategory
+    });
+    const setupChannel = await message.guild.channels.create({
+      name: '➕ oda-oluştur',
+      type: ChannelType.GuildVoice,
+      parent: category.id,
+      userLimit: 1
+    });
+    config.özelOdaCategory = category.id;
+    config.özelOdaSetupChannel = setupChannel.id;
+    saveJSON('config.json', config);
+    message.reply(`✅ Özel oda sistemi kuruldu!\nKategori: ${category.name}\nKurulum kanalı: ${setupChannel.name}`);
+  }
+
+  // ====================== SUNUCU BİLGİ ======================
+  if (command === 'sunucubilgi') {
+    const guild = message.guild;
+    const owner = await guild.fetchOwner();
+    const embed = new EmbedBuilder()
+      .setTitle(`${guild.name} Bilgileri`)
+      .setThumbnail(guild.iconURL({ size: 1024 }))
+      .addFields(
+        { name: 'Sahip', value: `${owner.user.tag}`, inline: true },
+        { name: 'Üye Sayısı', value: `${guild.memberCount}`, inline: true },
+        { name: 'Rol Sayısı', value: `${guild.roles.cache.size}`, inline: true },
+        { name: 'Kanal Sayısı', value: `${guild.channels.cache.size}`, inline: true },
+        { name: 'Oluşturulma', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:R>`, inline: true }
+      )
+      .setColor(0x5865F2);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('members_list').setLabel('Üyeleri Göster').setStyle(ButtonStyle.Primary)
+    );
+
+    const msg = await message.reply({ embeds: [embed], components: [row] });
+
+    const collector = msg.createMessageComponentCollector({ time: 60000 });
+    collector.on('collect', async (i) => {
+      if (i.user.id !== message.author.id) return i.reply({ content: 'Bu menü sana ait değil.', ephemeral: true });
+      if (i.customId === 'members_list') {
+        const members = await guild.members.fetch();
+        const list = members.map(m => m.user.tag).slice(0, 50).join('\n') || 'Yok';
+        await i.reply({ content: `**İlk 50 üye:**\n\`\`\`${list}\`\`\``, ephemeral: true });
+      }
+    });
+  }
+
+  // ====================== YARDIM MENÜSÜ ======================
+  if (command === 'yardim' || command === 'help') {
+    const mainEmbed = new EmbedBuilder()
+      .setTitle('ASTROL Yardım Menüsü')
+      .setDescription('Aşağıdaki butonlardan kategori seç:')
+      .setColor(0x5865F2)
+      .setFooter({ text: 'Sadece sen kullanabilirsin • Süre sınırı yok' });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('mod').setLabel('Moderasyon').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('jail').setLabel('Jail & Rol').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('sistem').setLabel('Sistem').setStyle(ButtonStyle.Success)
+    );
+
+    const msg = await message.reply({ embeds: [mainEmbed], components: [row] });
+
+    const collector = msg.createMessageComponentCollector({
+      filter: i => i.user.id === message.author.id,
+      time: 0
+    });
+
+    collector.on('collect', async (i) => {
+      let embed;
+      if (i.customId === 'mod') {
+        embed = new EmbedBuilder()
+          .setTitle('Moderasyon Komutları')
+          .setColor(0xff0000)
+          .setDescription(`
+\`.ban @kişi [sebep]\`
+\`.unban <ID>\`
+\`.mute @üye <süre> [sebep]\` (10m, 2h, 1d)
+\`.unmute @üye\`
+\`.kick @üye [sebep]\`
+\`.warn @üye [sebep]\`
+\`.warnings @üye\`
+\`.clearwarns @üye\`
+\`.sil <sayı>\`
+\`.yavaş-mod <saniye>\`
+          `);
+      } else if (i.customId === 'jail') {
+        embed = new EmbedBuilder()
+          .setTitle('Jail & Rol Komutları')
+          .setColor(0x8b0000)
+          .setDescription(`
+\`.jail @üye\`
+\`.unjail @üye\`
+\`.jailrol <rol ID>\`
+\`.jailytrol @rol\`
+\`.üyerol @rol\`
+\`.rolver @üye @rol\`
+\`.rolal @üye @rol\`
+          `);
+      } else if (i.customId === 'sistem') {
+        embed = new EmbedBuilder()
+          .setTitle('Sistem Komutları')
+          .setColor(0x00ff00)
+          .setDescription(`
+\`.küfür-ekle <kelime>\`
+\`.küfür-sil <kelime>\`
+\`.linkistisna #kanal\`
+\`.özelodasetup\`
+\`.sunucubilgi\`
+\`.avatar [@kişi]\`
+\`.snipe\`
+\`.yardim\`
+          `);
+      }
+      await i.update({ embeds: [embed], components: [row] });
+    });
+  }
 });
 
+// ====================== SNIPE (silinen mesaj) ======================
+client.on('messageDelete', async (message) => {
+  if (!message.guild || message.author?.bot) return;
+  lastDeleted[message.channel.id] = {
+    content: message.content,
+    author: message.author?.tag || 'Bilinmeyen',
+    avatar: message.author?.displayAvatarURL() || null,
+    date: Date.now(),
+    image: message.attachments.first()?.proxyURL || null
+  };
+  saveJSON('snipe.json', lastDeleted);
+});
+
+// ====================== ÖZEL ODA SİSTEMİ ======================
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  if (!config.özelOdaSetupChannel || !config.özelOdaCategory) return;
+
+  if (newState.channelId === config.özelOdaSetupChannel) {
+    const channel = await newState.guild.channels.create({
+      name: `🔊 ${newState.member.user.username}`,
+      type: ChannelType.GuildVoice,
+      parent: config.özelOdaCategory,
+      permissionOverwrites: [
+        {
+          id: newState.member.id,
+          allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.Connect]
+        },
+        {
+          id: newState.guild.id,
+          allow: [PermissionFlagsBits.Connect]
+        }
+      ]
+    });
+    await newState.setChannel(channel);
+  }
+
+  if (oldState.channel && oldState.channel.parentId === config.özelOdaCategory && oldState.channel.id !== config.özelOdaSetupChannel) {
+    if (oldState.channel.members.size === 0) {
+      await oldState.channel.delete().catch(() => {});
+    }
+  }
+});
+
+// ====================== LOGIN ======================
 client.login(process.env.DISCORD_TOKEN);
-            
