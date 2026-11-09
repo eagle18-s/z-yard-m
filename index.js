@@ -121,6 +121,58 @@ client.once('ready', () => {
   client.user.setActivity('KETO | .yardim', { type: 3 });
 });
 
+// ====================== INTERACTION CREATE (Ticket butonları) ======================
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  // Ticket bağlama düyməsi
+  if (interaction.customId === 'ticket_close') {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('Problem çözüldü mü?')
+      .setDescription('Lütfen seçim yapın. Bu bilgi EFENDİM\'e iletilecektir.')
+      .setColor(0x5865F2);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('ticket_yes').setLabel('Evet').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('ticket_no').setLabel('Hayır').setStyle(ButtonStyle.Danger)
+    );
+
+    await interaction.reply({ embeds: [embed], components: [row] });
+  }
+
+  // Evet / Hayır seçimi
+  if (interaction.customId === 'ticket_yes' || interaction.customId === 'ticket_no') {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
+    }
+
+    const resolved = interaction.customId === 'ticket_yes' ? 'Evet' : 'Hayır';
+    const channel = interaction.channel;
+
+    // EFENDİM-ə məlumat
+    await efendimLog(
+      interaction.guild,
+      'TICKET KAPANDI',
+      `**Kanal:** ${channel.name}\n**Kapatan:** \( {interaction.user.tag}\n**Problem çözüldü mü?:** ** \){resolved}**\n**Sunucu:** ${interaction.guild.name}`,
+      resolved === 'Evet' ? 0x00ff00 : 0xff0000
+    );
+
+    await interaction.update({
+      content: `✅ Seçim kaydedildi: **${resolved}**\nKanal 5 saniye içinde silinecek...`,
+      embeds: [],
+      components: []
+    });
+
+    setTimeout(async () => {
+      await channel.delete().catch(() => {});
+    }, 5000);
+  }
+});
+
 // ====================== MESSAGE CREATE ======================
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
@@ -167,6 +219,66 @@ client.on('messageCreate', async (message) => {
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
+
+  // ====================== TICKET SİSTEMİ ======================
+  if (command === 'ticket') {
+    const reason = args.join(' ');
+    if (!reason) return message.reply('❌ Lütfen bir sebep yaz: `.ticket <sebep>`');
+
+    // Ticket kategorisi yoxdursa yarat
+    let category = message.guild.channels.cache.find(c => c.name === 'TICKETS' && c.type === ChannelType.GuildCategory);
+    if (!category) {
+      category = await message.guild.channels.create({
+        name: 'TICKETS',
+        type: ChannelType.GuildCategory
+      });
+    }
+
+    const channelName = `ticket-${message.author.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20);
+
+    const ticketChannel = await message.guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      permissionOverwrites: [
+        {
+          id: message.guild.id,
+          deny: [PermissionFlagsBits.ViewChannel]
+        },
+        {
+          id: message.author.id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
+        },
+        {
+          id: client.user.id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels]
+        }
+      ]
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle('🎫 Destek Talebi Oluşturuldu')
+      .setDescription(`**Kullanıcı:** ${message.author}\n**Sebep:** ${reason}\n\nYetkililer ticketi kapatmak için aşağıdaki butonu kullanabilir.`)
+      .setColor(0x5865F2)
+      .setTimestamp()
+      .setFooter({ text: `Ticket ID: ${ticketChannel.id}` });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('ticket_close')
+        .setLabel('Ticketi Bağla')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒')
+    );
+
+    await ticketChannel.send({
+      content: `@here | Yeni destek talebi!`,
+      embeds: [embed],
+      components: [row]
+    });
+
+    await message.reply(`✅ Destek talebin oluşturuldu: ${ticketChannel}`);
+  }
 
   // ====================== MODERASYON ======================
   if (command === 'ban') {
@@ -299,7 +411,7 @@ client.on('messageCreate', async (message) => {
     if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
     saveJSON('warns.json', warns);
     message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
-          }
+  }
   // ====================== JAIL SİSTEMİ ======================
   if (command === 'jail') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -309,7 +421,6 @@ client.on('messageCreate', async (message) => {
     const member = message.mentions.members.first();
     if (!member) return message.reply('❌ Kullanıcı etiketle.');
 
-    // Rol hiyerarşisi kontrolü
     const botMember = message.guild.members.me;
     if (member.roles.highest.position >= botMember.roles.highest.position) {
       return message.reply('Bot gardaşıma jail atamam');
@@ -547,6 +658,7 @@ client.on('messageCreate', async (message) => {
 \`.clearwarns @üye\`
 \`.sil <sayı>\`
 \`.yavaş-mod <saniye>\`
+\`.ticket <sebep>\`
           `);
       } else if (i.customId === 'jail') {
         embed = new EmbedBuilder()
@@ -573,6 +685,7 @@ client.on('messageCreate', async (message) => {
 \`.sunucubilgi\`
 \`.avatar [@kişi]\`
 \`.snipe\`
+\`.ticket <sebep>\`
 \`.yardim\`
           `);
       }
