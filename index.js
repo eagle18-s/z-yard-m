@@ -1162,6 +1162,3 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
 // ====================== LOGIN ======================
 client.login(process.env.DISCORD_TOKEN);
-Bu versiyada çəkiliş sistemi tam işlək vəziyyətdədir. Üç hissəni birləşdirib
-
-  if (oldState.channel && oldState.channel.parentId === config.özelOdaCategory && oldState.channe
