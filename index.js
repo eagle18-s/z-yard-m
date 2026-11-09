@@ -118,7 +118,7 @@ setInterval(async () => {
 // ====================== BOT READY ======================
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} aktif!`);
-  client.user.setActivity('KETO⚡ | .yardim', { type: 3 });
+  client.user.setActivity('KETO ⚡| .yardim', { type: 3 });
 });
 
 // ====================== INTERACTION CREATE (Ticket butonları) ======================
@@ -318,7 +318,44 @@ client.on('messageCreate', async (message) => {
     } catch (err) {
       message.reply('❌ Kanal açılırken bir hata oluştu.');
     }
-      }
+  }
+ // ====================== SES KANALINA KATIL / ÇIK ======================
+  if (command === 'katıl' || command === 'katil') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const channel = message.mentions.channels.first();
+    if (!channel || channel.type !== ChannelType.GuildVoice) {
+      return message.reply('❌ Lütfen geçerli bir ses kanalı etiketleyin: `.katıl #ses-kanalı`');
+    }
+
+    try {
+      await message.guild.members.me.voice.setChannel(channel);
+      await message.reply(`✅ Bot başarıyla **${channel.name}** ses kanalına katıldı.`);
+    } catch (err) {
+      message.reply('❌ Ses kanalına katılınamadı. Botun **Bağlan** ve **Konuş** yetkileri olduğundan emin olun.');
+    }
+  }
+
+  if (command === 'çık-kanal' || command === 'cik-kanal' || command === 'çıkkanal') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const botVoice = message.guild.members.me.voice.channel;
+    if (!botVoice) {
+      return message.reply('❌ Bot şu anda hiçbir ses kanalında değil.');
+    }
+
+    try {
+      await message.guild.members.me.voice.disconnect();
+      await message.reply(`✅ Bot **${botVoice.name}** ses kanalından çıkarıldı.`);
+    } catch (err) {
+      message.reply('❌ Kanaldan çıkarken bir hata oluştu.');
+    }
+  }
+
   // ====================== STİCKER ÇEKME ======================
   if (command === 'stiker-çek' || command === 'sticker-çek') {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageGuildExpressions)) {
@@ -327,7 +364,6 @@ client.on('messageCreate', async (message) => {
 
     let sticker = message.stickers.first();
 
-    // Eğer yanıt verilen mesajda sticker varsa onu al
     if (!sticker && message.reference) {
       try {
         const repliedMsg = await message.channel.messages.fetch(message.reference.messageId);
@@ -512,7 +548,7 @@ client.on('messageCreate', async (message) => {
     if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
     saveJSON('warns.json', warns);
     message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
-  }
+      }
   // ====================== JAIL SİSTEMİ ======================
   if (command === 'jail') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -763,6 +799,8 @@ client.on('messageCreate', async (message) => {
 \`.kilit [#kanal]\`
 \`.kilitaç [#kanal]\`
 \`.mesaj-gönder #kanal <mesaj>\`
+\`.katıl #seskanalı\`
+\`.çık-kanal\`
           `);
       } else if (i.customId === 'jail') {
         embed = new EmbedBuilder()
@@ -794,6 +832,8 @@ client.on('messageCreate', async (message) => {
 \`.kilitaç [#kanal]\`
 \`.stiker-çek\` (sticker'a yanıt ver)
 \`.mesaj-gönder #kanal <mesaj>\`
+\`.katıl #seskanalı\`
+\`.çık-kanal\`
 \`.yardim\`
           `);
       }
