@@ -68,6 +68,9 @@ let lastDeleted = loadJSON('snipe.json', {});
 // Spam koruması
 const spamMap = new Map();
 
+// Çekiliş sistemi
+const activeGiveaways = new Map();
+
 // ====================== EFENDİM LOG ======================
 async function efendimLog(guild, title, description, color = 0x2b2d31) {
   const embed = new EmbedBuilder()
@@ -118,13 +121,14 @@ setInterval(async () => {
 // ====================== BOT READY ======================
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} aktif!`);
-  client.user.setActivity('KETO⚡', { type: 3 });
+  client.user.setActivity('ASTROL | .yardim', { type: 3 });
 });
 
-// ====================== INTERACTION CREATE (Ticket butonları) ======================
+// ====================== INTERACTION CREATE ======================
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
+  // Ticket butonları
   if (interaction.customId === 'ticket_close') {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
@@ -167,6 +171,36 @@ client.on('interactionCreate', async (interaction) => {
     setTimeout(async () => {
       await channel.delete().catch(() => {});
     }, 5000);
+  }
+
+  // Çekiliş katılma düyməsi
+  if (interaction.customId === 'giveaway_join') {
+    const giveaway = activeGiveaways.get(interaction.message.id);
+
+    if (!giveaway) {
+      return interaction.reply({ content: '❌ Bu çekiliş sona ermiş veya bulunamadı.', ephemeral: true });
+    }
+
+    if (giveaway.ended) {
+      return interaction.reply({ content: '❌ Bu çekiliş zaten sona erdi.', ephemeral: true });
+    }
+
+    if (giveaway.participants.has(interaction.user.id)) {
+      return interaction.reply({ content: '❌ Zaten bu çekilişe katıldınız!', ephemeral: true });
+    }
+
+    giveaway.participants.add(interaction.user.id);
+
+    // Embed-i yenilə (iştirakçı sayını göstər)
+    const embed = EmbedBuilder.from(interaction.message.embeds[0]);
+    embed.spliceFields(0, 1, {
+      name: 'Katılımcı Sayısı',
+      value: `${giveaway.participants.size}`,
+      inline: true
+    });
+
+    await interaction.message.edit({ embeds: [embed] });
+    await interaction.reply({ content: '✅ Başarıyla çekilişe katıldınız! Bol şans 🎉', ephemeral: true });
   }
 });
 
@@ -217,6 +251,126 @@ client.on('messageCreate', async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
+  // ====================== ÇEKİLİŞ SİSTEMİ ======================
+  if (command === 'çekiliş' || command === 'cekiliş' || command === 'giveaway') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const time = args[0];
+    const winnersCount = parseInt(args[1]);
+    const prize = args.slice(2).join(' ');
+
+    if (!time || !winnersCount || !prize || isNaN(winnersCount) || winnersCount < 1) {
+      return message.reply('❌ Doğru kullanım:\n`.çekiliş <süre> <kazanan sayısı> <ödül>`\n\nÖrnek:\n`.çekiliş 10m 1 Discord Nitro`\n`.çekiliş 1h 3 500 TL`');
+    }
+
+    const duration = ms(time);
+    if (!duration || duration < 10000) {
+      return message.reply('❌ Geçerli bir süre yaz (minimum 10 saniye). Örnek: 10m, 1h, 1d');
+    }
+
+    const endTime = Date.now() + duration;
+
+    const embed = new EmbedBuilder()
+      .setTitle('🎉 ÇEKİLİŞ BAŞLADI!')
+      .setDescription(`**Ödül:** ${prize}\n\nAşağıdaki **Katıl** butonuna basarak çekilişe katılabilirsiniz.`)
+      .addFields(
+        { name: 'Katılımcı Sayısı', value: '0', inline: true },
+        { name: 'Kazanan Sayısı', value: `${winnersCount}`, inline: true },
+        { name: 'Bitiş', value: `<t:${Math.floor(endTime / 1000)}:R>`, inline: true }
+      )
+      .setColor(0x5865F2)
+      .setFooter({ text: `Başlatan: ${message.author.tag}` })
+      .setTimestamp(endTime);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('giveaway_join')
+        .setLabel('Katıl')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('🎉')
+    );
+
+    const giveawayMsg = await message.channel.send({ embeds: [embed], components: [row] });
+
+    activeGiveaways.set(giveawayMsg.id, {
+      channelId: message.channel.id,
+      guildId: message.guild.id,
+      prize,
+      winnersCount,
+      endTime,
+      participants: new Set(),
+      host: message.author.id,
+      ended: false
+    });
+
+    // Vaxt bitəndə avtomatik bitir
+    setTimeout(async () => {
+      const giveaway = activeGiveaways.get(giveawayMsg.id);
+      if (!giveaway || giveaway.ended) return;
+
+      giveaway.ended = true;
+
+      const participants = [...giveaway.participants];
+      let winners = [];
+
+      if (participants.length === 0) {
+        winners = [];
+      } else {
+        // Təsadüfi qaliblər seç
+        const shuffled = participants.sort(() => 0.5 - Math.random());
+        winners = shuffled.slice(0, Math.min(giveaway.winnersCount, participants.length));
+      }
+
+      const resultEmbed = new EmbedBuilder()
+        .setTitle('🎉 ÇEKİLİŞ SONA ERDİ!')
+        .setDescription(`**Ödül:** ${giveaway.prize}`)
+        .setColor(0x00ff00)
+        .setTimestamp();
+
+      if (winners.length === 0) {
+        resultEmbed.addFields({ name: 'Kazananlar', value: 'Katılımcı olmadığı için kazanan yok.' });
+      } else {
+        resultEmbed.addFields({
+          name: 'Kazananlar',
+          value: winners.map(id => `<@${id}>`).join('\n')
+        });
+      }
+
+      resultEmbed.addFields({
+        name: 'Toplam Katılımcı',
+        value: `${participants.length}`,
+        inline: true
+      });
+
+      const disabledRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('giveaway_ended')
+          .setLabel('Çekiliş Sona Erdi')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true)
+      );
+
+      try {
+        const channel = await client.channels.fetch(giveaway.channelId);
+        const msg = await channel.messages.fetch(giveawayMsg.id);
+        await msg.edit({ embeds: [resultEmbed], components: [disabledRow] });
+
+        if (winners.length > 0) {
+          await channel.send({
+            content: `🎉 Tebrikler \( {winners.map(id => `<@ \){id}>`).join(', ')}!\n**Ödül:** ${giveaway.prize}`
+          });
+        }
+      } catch (err) {
+        console.log('Çekiliş bitirme hatası:', err.message);
+      }
+
+      activeGiveaways.delete(giveawayMsg.id);
+    }, duration);
+
+    await message.reply(`✅ Çekiliş başlatıldı! ${time} sonra sona erecek.`);
+        }
   // ====================== TICKET SİSTEMİ ======================
   if (command === 'ticket') {
     const reason = args.join(' ');
@@ -318,7 +472,8 @@ client.on('messageCreate', async (message) => {
     } catch (err) {
       message.reply('❌ Kanal açılırken bir hata oluştu.');
     }
-    }
+  }
+
   // ====================== KANAL YARAT / SİL ======================
   if (command === 'kanal-yarat') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -528,7 +683,6 @@ client.on('messageCreate', async (message) => {
       message.reply('❌ Embed gönderilemedi.');
     }
   }
-
   // ====================== MODERASYON ======================
   if (command === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
@@ -618,7 +772,8 @@ client.on('messageCreate', async (message) => {
     await member.kick(reason);
     await message.reply(`✅ **${member.user.tag}** sunucudan atıldı.\nSebep: ${reason}`);
     efendimLog(message.guild, 'KICK', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}\n**Sebep:** ${reason}`, 0xff5500);
-      }
+  }
+
   // ====================== UYARI SİSTEMİ ======================
   if (command === 'warn') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -898,7 +1053,7 @@ client.on('messageCreate', async (message) => {
           .setDescription(`
 \`.ban @kişi [sebep]\`
 \`.unban <ID>\`
-\`.mute @üye <süre> [sebep]\` (10m, 2h, 1d)
+\`.mute @üye <süre> [sebep]\`
 \`.unmute @üye\`
 \`.kick @üye [sebep]\`
 \`.warn @üye [sebep]\`
@@ -913,6 +1068,7 @@ client.on('messageCreate', async (message) => {
 \`.kanal-sil #kanal\`
 \`.mesaj-gönder #kanal <mesaj>\`
 \`.embed <başlık> <mesaj> [resim]\`
+\`.çekiliş <süre> <kazanan> <ödül>\`
 \`.katıl #seskanalı\`
 \`.çık-kanal\`
           `);
@@ -949,6 +1105,7 @@ client.on('messageCreate', async (message) => {
 \`.stiker-çek\`
 \`.mesaj-gönder #kanal <mesaj>\`
 \`.embed <başlık> <mesaj> [resim]\`
+\`.çekiliş <süre> <kazanan> <ödül>\`
 \`.katıl #seskanalı\`
 \`.çık-kanal\`
 \`.yardim\`
@@ -959,7 +1116,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ====================== SNIPE (silinen mesaj) ======================
+// ====================== SNIPE ======================
 client.on('messageDelete', async (message) => {
   if (!message.guild || message.author?.bot) return;
   lastDeleted[message.channel.id] = {
@@ -1004,3 +1161,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
 // ====================== LOGIN ======================
 client.login(process.env.DISCORD_TOKEN);
+Bu versiyada çəkiliş sistemi tam işlək vəziyyətdədir. Üç hissəni birləşdirib
+
+  if (oldState.channel && oldState.channel.parentId === config.özelOdaCategory && oldState.channe
