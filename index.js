@@ -118,7 +118,7 @@ setInterval(async () => {
 // ====================== BOT READY ======================
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} aktif!`);
-  client.user.setActivity('KETO ⚡| .yardim', { type: 3 });
+  client.user.setActivity('ASTROL | .yardim', { type: 3 });
 });
 
 // ====================== INTERACTION CREATE (Ticket butonları) ======================
@@ -318,8 +318,63 @@ client.on('messageCreate', async (message) => {
     } catch (err) {
       message.reply('❌ Kanal açılırken bir hata oluştu.');
     }
+           }
+  // ====================== KANAL YARAT / SİL ======================
+  if (command === 'kanal-yarat') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const kanalAdi = args[0];
+    const tip = args[1]?.toLowerCase();
+
+    if (!kanalAdi || !tip || !['herkeseaçık', 'herkeseacik', 'kilitli'].includes(tip)) {
+      return message.reply('❌ Doğru kullanım:\n`.kanal-yarat <kanaladı> herkeseaçık`\n`.kanal-yarat <kanaladı> kilitli`');
+    }
+
+    const isLocked = tip === 'kilitli';
+
+    try {
+      const channel = await message.guild.channels.create({
+        name: kanalAdi,
+        type: ChannelType.GuildText,
+        permissionOverwrites: isLocked ? [
+          {
+            id: message.guild.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          {
+            id: client.user.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels]
+          }
+        ] : []
+      });
+
+      await message.reply(`✅ Kanal başarıyla oluşturuldu: \( {channel}\nDurum: ** \){isLocked ? 'Kilitli (sadece yöneticiler)' : 'Herkese açık'}**`);
+    } catch (err) {
+      message.reply('❌ Kanal oluşturulurken bir hata oluştu. Botun **Kanalları Yönet** yetkisi olduğundan emin olun.');
+    }
   }
- 
+
+  if (command === 'kanal-sil') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const channel = message.mentions.channels.first();
+    if (!channel) {
+      return message.reply('❌ Lütfen silinecek kanalı etiketleyin: `.kanal-sil #kanal`');
+    }
+
+    try {
+      const channelName = channel.name;
+      await channel.delete();
+      await message.reply(`✅ **${channelName}** kanalı başarıyla silindi.`);
+    } catch (err) {
+      message.reply('❌ Kanal silinirken bir hata oluştu. Botun yetkisi olduğundan emin olun.');
+    }
+  }
+
   // ====================== SES KANALINA KATIL / ÇIK ======================
   if (command === 'katıl' || command === 'katil') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -368,6 +423,7 @@ client.on('messageCreate', async (message) => {
       message.reply('❌ Kanaldan çıkarken bir hata oluştu.');
     }
   }
+
   // ====================== STİCKER ÇEKME ======================
   if (command === 'stiker-çek' || command === 'sticker-çek') {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageGuildExpressions)) {
@@ -519,8 +575,7 @@ client.on('messageCreate', async (message) => {
     await member.kick(reason);
     await message.reply(`✅ **${member.user.tag}** sunucudan atıldı.\nSebep: ${reason}`);
     efendimLog(message.guild, 'KICK', `**Kullanıcı:** ${member.user.tag}\n**Moderatör:** ${message.author.tag}\n**Sebep:** ${reason}`, 0xff5500);
-  }
-
+        }
   // ====================== UYARI SİSTEMİ ======================
   if (command === 'warn') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -560,7 +615,8 @@ client.on('messageCreate', async (message) => {
     if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
     saveJSON('warns.json', warns);
     message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
-      }
+  }
+
   // ====================== JAIL SİSTEMİ ======================
   if (command === 'jail') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -810,6 +866,8 @@ client.on('messageCreate', async (message) => {
 \`.ticket <sebep>\`
 \`.kilit [#kanal]\`
 \`.kilitaç [#kanal]\`
+\`.kanal-yarat <ad> <herkeseaçık/kilitli>\`
+\`.kanal-sil #kanal\`
 \`.mesaj-gönder #kanal <mesaj>\`
 \`.katıl #seskanalı\`
 \`.çık-kanal\`
@@ -842,7 +900,9 @@ client.on('messageCreate', async (message) => {
 \`.ticket <sebep>\`
 \`.kilit [#kanal]\`
 \`.kilitaç [#kanal]\`
-\`.stiker-çek\` (sticker'a yanıt ver)
+\`.kanal-yarat <ad> <herkeseaçık/kilitli>\`
+\`.kanal-sil #kanal\`
+\`.stiker-çek\`
 \`.mesaj-gönder #kanal <mesaj>\`
 \`.katıl #seskanalı\`
 \`.çık-kanal\`
