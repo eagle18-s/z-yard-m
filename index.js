@@ -359,7 +359,8 @@ client.on('messageCreate', async (message) => {
 
         if (winners.length > 0) {
           await channel.send({
-            content: `🎉 Tebrikler \( {winners.map(id => `<@ \){id}>`).join(', ')}!\n**Ödül:** ${giveaway.prize}`
+            content: `🎉 Tebrikler ${winners.map(id => `<@${id}>`).join(', ')}!\n**Ödül:** ${giveaway.prize}`
+        
           });
         }
       } catch (err) {
