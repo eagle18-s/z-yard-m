@@ -118,14 +118,13 @@ setInterval(async () => {
 // ====================== BOT READY ======================
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} aktif!`);
-  client.user.setActivity('ASTROL | .yardim', { type: 3 });
+  client.user.setActivity('KETO⚡ | .yardim', { type: 3 });
 });
 
 // ====================== INTERACTION CREATE (Ticket butonları) ======================
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
-  // Ticket bağlama düyməsi
   if (interaction.customId === 'ticket_close') {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
@@ -144,7 +143,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ embeds: [embed], components: [row] });
   }
 
-  // Evet / Hayır seçimi
   if (interaction.customId === 'ticket_yes' || interaction.customId === 'ticket_no') {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
@@ -278,7 +276,7 @@ client.on('messageCreate', async (message) => {
     await message.reply(`✅ Destek talebin oluşturuldu: ${ticketChannel}`);
   }
 
-  // ====================== KANAL KİLİTLEME ======================
+  // ====================== KANAL KİLİTLEME / AÇMA ======================
   if (command === 'kilit') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
@@ -287,12 +285,10 @@ client.on('messageCreate', async (message) => {
     const channel = message.mentions.channels.first() || message.channel;
 
     try {
-      // @everyone üçün ViewChannel-i bağla
       await channel.permissionOverwrites.edit(message.guild.id, {
         ViewChannel: false
       });
 
-      // Botun kanalı görməyə davam etməsi üçün
       await channel.permissionOverwrites.edit(client.user.id, {
         ViewChannel: true,
         SendMessages: true,
@@ -303,6 +299,86 @@ client.on('messageCreate', async (message) => {
       await message.reply(`🔒 ${channel} kanalı kilitlendi.\nArtık yalnızca **Yönetici** yetkisine sahip kişiler görebilir.`);
     } catch (err) {
       message.reply('❌ Kanal kilitlenirken bir hata oluştu. Botun **Kanalları Yönet** yetkisi olduğundan emin ol.');
+    }
+  }
+
+  if (command === 'kilitaç') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const channel = message.mentions.channels.first() || message.channel;
+
+    try {
+      await channel.permissionOverwrites.edit(message.guild.id, {
+        ViewChannel: true
+      });
+
+      await message.reply(`🔓 ${channel} kanalının kilidi açıldı. Artık herkes görebilir.`);
+    } catch (err) {
+      message.reply('❌ Kanal açılırken bir hata oluştu.');
+    }
+      }
+  // ====================== STİCKER ÇEKME ======================
+  if (command === 'stiker-çek' || command === 'sticker-çek') {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageGuildExpressions)) {
+      return message.reply('❌ Bu komutu kullanmak için **İfadeleri Yönet** yetkisine sahip olmalısın.');
+    }
+
+    let sticker = message.stickers.first();
+
+    // Eğer yanıt verilen mesajda sticker varsa onu al
+    if (!sticker && message.reference) {
+      try {
+        const repliedMsg = await message.channel.messages.fetch(message.reference.messageId);
+        sticker = repliedMsg.stickers.first();
+      } catch {}
+    }
+
+    if (!sticker) {
+      return message.reply('❌ Lütfen bir sticker içeren mesaja yanıt verin veya sticker olan bir mesaj yazın.');
+    }
+
+    try {
+      const created = await message.guild.stickers.create({
+        file: sticker.url,
+        name: sticker.name.slice(0, 30),
+        tags: 'sticker',
+        description: `ASTROL tarafından eklendi`
+      });
+
+      await message.reply(`✅ Sticker başarıyla eklendi: **${created.name}**`);
+    } catch (err) {
+      console.log(err);
+      message.reply('❌ Sticker eklenemedi. Sunucunun boost seviyesi yetersiz olabilir veya botun yetkisi yoktur.');
+    }
+  }
+
+  // ====================== MESAJ GÖNDERME ======================
+  if (command === 'mesaj-gönder' || command === 'mesajgonder') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const channel = message.mentions.channels.first();
+    if (!channel) {
+      return message.reply('❌ Lütfen bir kanal etiketleyin: `.mesaj-gönder #kanal Mesajınız burada`');
+    }
+
+    const content = args.slice(1).join(' ');
+    if (!content) {
+      return message.reply('❌ Gönderilecek mesajı yazın.');
+    }
+
+    if (content.length > 2000) {
+      return message.reply('❌ Mesaj çok uzun! Maksimum 2000 karakter olabilir.');
+    }
+
+    try {
+      await channel.send(content);
+      await message.reply(`✅ Mesaj başarıyla ${channel} kanalına gönderildi.`);
+    } catch (err) {
+      message.reply('❌ Mesaj gönderilemedi. Botun o kanalda yazma yetkisi olduğundan emin olun.');
     }
   }
 
@@ -436,7 +512,7 @@ client.on('messageCreate', async (message) => {
     if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
     saveJSON('warns.json', warns);
     message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
-}
+  }
   // ====================== JAIL SİSTEMİ ======================
   if (command === 'jail') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -685,6 +761,8 @@ client.on('messageCreate', async (message) => {
 \`.yavaş-mod <saniye>\`
 \`.ticket <sebep>\`
 \`.kilit [#kanal]\`
+\`.kilitaç [#kanal]\`
+\`.mesaj-gönder #kanal <mesaj>\`
           `);
       } else if (i.customId === 'jail') {
         embed = new EmbedBuilder()
@@ -713,6 +791,9 @@ client.on('messageCreate', async (message) => {
 \`.snipe\`
 \`.ticket <sebep>\`
 \`.kilit [#kanal]\`
+\`.kilitaç [#kanal]\`
+\`.stiker-çek\` (sticker'a yanıt ver)
+\`.mesaj-gönder #kanal <mesaj>\`
 \`.yardim\`
           `);
       }
