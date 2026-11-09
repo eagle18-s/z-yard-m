@@ -319,7 +319,8 @@ client.on('messageCreate', async (message) => {
       message.reply('❌ Kanal açılırken bir hata oluştu.');
     }
   }
- // ====================== SES KANALINA KATIL / ÇIK ======================
+ 
+  // ====================== SES KANALINA KATIL / ÇIK ======================
   if (command === 'katıl' || command === 'katil') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
@@ -331,10 +332,20 @@ client.on('messageCreate', async (message) => {
     }
 
     try {
-      await message.guild.members.me.voice.setChannel(channel);
+      const { joinVoiceChannel } = require('@discordjs/voice');
+
+      joinVoiceChannel({
+        channelId: channel.id,
+        guildId: message.guild.id,
+        adapterCreator: message.guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false
+      });
+
       await message.reply(`✅ Bot başarıyla **${channel.name}** ses kanalına katıldı.`);
     } catch (err) {
-      message.reply('❌ Ses kanalına katılınamadı. Botun **Bağlan** ve **Konuş** yetkileri olduğundan emin olun.');
+      console.error(err);
+      message.reply('❌ Ses kanalına katılınamadı.\n\n**Kontrol et:**\n• Botun o kanalda **Bağlan** ve **Konuş** yetkisi var mı?\n• Bot rolü kanalın izinlerinde engellenmiş olmasın\n• Bot rolü yeterince yukarıda olsun');
     }
   }
 
@@ -343,19 +354,20 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
     }
 
-    const botVoice = message.guild.members.me.voice.channel;
-    if (!botVoice) {
-      return message.reply('❌ Bot şu anda hiçbir ses kanalında değil.');
-    }
-
     try {
-      await message.guild.members.me.voice.disconnect();
-      await message.reply(`✅ Bot **${botVoice.name}** ses kanalından çıkarıldı.`);
+      const { getVoiceConnection } = require('@discordjs/voice');
+      const connection = getVoiceConnection(message.guild.id);
+
+      if (!connection) {
+        return message.reply('❌ Bot şu anda hiçbir ses kanalında değil.');
+      }
+
+      connection.destroy();
+      await message.reply(`✅ Bot ses kanalından çıkarıldı.`);
     } catch (err) {
       message.reply('❌ Kanaldan çıkarken bir hata oluştu.');
     }
   }
-
   // ====================== STİCKER ÇEKME ======================
   if (command === 'stiker-çek' || command === 'sticker-çek') {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageGuildExpressions)) {
