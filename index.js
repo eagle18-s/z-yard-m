@@ -118,7 +118,7 @@ setInterval(async () => {
 // ====================== BOT READY ======================
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} aktif!`);
-  client.user.setActivity('KETO | .yardim', { type: 3 });
+  client.user.setActivity('ASTROL | .yardim', { type: 3 });
 });
 
 // ====================== INTERACTION CREATE (Ticket butonları) ======================
@@ -153,7 +153,6 @@ client.on('interactionCreate', async (interaction) => {
     const resolved = interaction.customId === 'ticket_yes' ? 'Evet' : 'Hayır';
     const channel = interaction.channel;
 
-    // EFENDİM-ə məlumat
     await efendimLog(
       interaction.guild,
       'TICKET KAPANDI',
@@ -225,7 +224,6 @@ client.on('messageCreate', async (message) => {
     const reason = args.join(' ');
     if (!reason) return message.reply('❌ Lütfen bir sebep yaz: `.ticket <sebep>`');
 
-    // Ticket kategorisi yoxdursa yarat
     let category = message.guild.channels.cache.find(c => c.name === 'TICKETS' && c.type === ChannelType.GuildCategory);
     if (!category) {
       category = await message.guild.channels.create({
@@ -280,6 +278,34 @@ client.on('messageCreate', async (message) => {
     await message.reply(`✅ Destek talebin oluşturuldu: ${ticketChannel}`);
   }
 
+  // ====================== KANAL KİLİTLEME ======================
+  if (command === 'kilit') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.');
+    }
+
+    const channel = message.mentions.channels.first() || message.channel;
+
+    try {
+      // @everyone üçün ViewChannel-i bağla
+      await channel.permissionOverwrites.edit(message.guild.id, {
+        ViewChannel: false
+      });
+
+      // Botun kanalı görməyə davam etməsi üçün
+      await channel.permissionOverwrites.edit(client.user.id, {
+        ViewChannel: true,
+        SendMessages: true,
+        ManageChannels: true,
+        ReadMessageHistory: true
+      });
+
+      await message.reply(`🔒 ${channel} kanalı kilitlendi.\nArtık yalnızca **Yönetici** yetkisine sahip kişiler görebilir.`);
+    } catch (err) {
+      message.reply('❌ Kanal kilitlenirken bir hata oluştu. Botun **Kanalları Yönet** yetkisi olduğundan emin ol.');
+    }
+  }
+
   // ====================== MODERASYON ======================
   if (command === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
@@ -294,7 +320,6 @@ client.on('messageCreate', async (message) => {
 
     const reason = args.slice(1).join(' ') || 'Sebep belirtilmedi';
     
-    // Banlanan kişiye DM
     const dmEmbed = new EmbedBuilder()
       .setTitle('Kaçaman Kurtulaman Kıbrıs Polisi')
       .setDescription(`**Sunucu:** ${message.guild.name}\n**Banlayan:** ${message.author.tag}\n**Sebep:** ${reason}`)
@@ -411,7 +436,7 @@ client.on('messageCreate', async (message) => {
     if (warns[message.guild.id]) delete warns[message.guild.id][member.id];
     saveJSON('warns.json', warns);
     message.reply(`✅ **${member.user.tag}** için tüm uyarılar silindi.`);
-  }
+}
   // ====================== JAIL SİSTEMİ ======================
   if (command === 'jail') {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -659,6 +684,7 @@ client.on('messageCreate', async (message) => {
 \`.sil <sayı>\`
 \`.yavaş-mod <saniye>\`
 \`.ticket <sebep>\`
+\`.kilit [#kanal]\`
           `);
       } else if (i.customId === 'jail') {
         embed = new EmbedBuilder()
@@ -686,6 +712,7 @@ client.on('messageCreate', async (message) => {
 \`.avatar [@kişi]\`
 \`.snipe\`
 \`.ticket <sebep>\`
+\`.kilit [#kanal]\`
 \`.yardim\`
           `);
       }
