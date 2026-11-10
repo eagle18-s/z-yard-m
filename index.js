@@ -123,7 +123,7 @@ setInterval(async () => {
 
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} aktif!`);
-  client.user.setActivity('ASTROL | .yardim', { type: 3 });
+  client.user.setActivity('KETO⚡', { type: 3 });
 });
 
 client.on('interactionCreate', async (interaction) => {
