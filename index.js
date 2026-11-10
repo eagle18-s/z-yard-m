@@ -347,7 +347,7 @@ client.on('messageCreate', async (message) => {
       category = await message.guild.channels.create({ name: 'TICKETS', type: ChannelType.GuildCategory });
     }
 
-    const channelName = `ticket-${message.author.username}`.toLowerCaseg, '').slice(0, 20);
+    const channelName = `ticket-${message.author.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20);
 
     const ticketChannel = await message.guild.channels.create({
       name: channelName,
