@@ -65,20 +65,10 @@ let config = loadJSON('config.json', {
 
 let warns = loadJSON('warns.json', {});
 let lastDeleted = loadJSON('snipe.json', {});
-let xpData = loadJSON('xp.json', {});
 
 const spamMap = new Map();
 const joinTracker = new Map();
 const activeGiveaways = new Map();
-const xpCooldown = new Map();
-
-function getLevel(xp) {
-  return Math.floor(0.1 * Math.sqrt(xp));
-}
-
-function getXpForLevel(level) {
-  return Math.pow(level / 0.1, 2);
-}
 
 async function efendimLog(guild, title, description, color = 0x2b2d31) {
   const embed = new EmbedBuilder()
@@ -132,7 +122,7 @@ client.on('interactionCreate', async (interaction) => {
   // Ticket
   if (interaction.customId === 'ticket_close') {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
+      return interaction.reply({ content: '❌ Bu düğmeyi sadece yetkililer kullanabilir.', ephemeral: true });
     }
     const embed = new EmbedBuilder()
       .setTitle('Problem çözüldü mü?')
@@ -147,7 +137,7 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.customId === 'ticket_yes' || interaction.customId === 'ticket_no') {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
+      return interaction.reply({ content: '❌ Bu düğmeyi sadece yetkililer kullanabilir.', ephemeral: true });
     }
     const resolved = interaction.customId === 'ticket_yes' ? 'Evet' : 'Hayır';
     const channel = interaction.channel;
@@ -174,25 +164,6 @@ client.on('interactionCreate', async (interaction) => {
 });
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
-
-  // ===== Leveling =====
-  const xpKey = `\( {message.guild.id}- \){message.author.id}`;
-  if (!xpCooldown.has(xpKey) || Date.now() - xpCooldown.get(xpKey) > 60000) {
-    xpCooldown.set(xpKey, Date.now());
-    if (!xpData[message.guild.id]) xpData[message.guild.id] = {};
-    if (!xpData[message.guild.id][message.author.id]) {
-      xpData[message.guild.id][message.author.id] = { xp: 0, level: 0 };
-    }
-    const userData = xpData[message.guild.id][message.author.id];
-    const gained = Math.floor(Math.random() * 15) + 10;
-    userData.xp += gained;
-    const newLevel = getLevel(userData.xp);
-    if (newLevel > userData.level) {
-      userData.level = newLevel;
-      message.channel.send(`🎉 \( {message.author} ** \){newLevel}** seviyesine ulaştı!`).catch(() => {});
-    }
-    saveJSON('xp.json', xpData);
-  }
 
   // ===== Küfür =====
   const contentLower = message.content.toLowerCase();
@@ -268,45 +239,6 @@ client.on('messageCreate', async (message) => {
       )
       .setColor(0x5865F2)
       .setTimestamp();
-    message.reply({ embeds: [embed] });
-  }
-
-  // ===== Seviye =====
-  if (command === 'seviye' || command === 'rank' || command === 'level') {
-    const member = message.mentions.members.first() || message.member;
-    const data = xpData[message.guild.id]?.[member.id] || { xp: 0, level: 0 };
-    const nextLevelXp = getXpForLevel(data.level + 1);
-    const progress = Math.min(100, Math.floor((data.xp / nextLevelXp) * 100));
-
-    const embed = new EmbedBuilder()
-      .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL() })
-      .setTitle('Seviye Bilgisi')
-      .addFields(
-        { name: 'Seviye', value: `${data.level}`, inline: true },
-        { name: 'XP', value: `${data.xp}`, inline: true },
-        { name: 'Sonraki Seviye', value: `${Math.floor(nextLevelXp)} XP`, inline: true },
-        { name: 'İlerleme', value: `\`\( {'█'.repeat(Math.floor(progress / 10))} \){'░'.repeat(10 - Math.floor(progress / 10))}\` ${progress}%` }
-      )
-      .setColor(0x00ff99)
-      .setThumbnail(member.user.displayAvatarURL());
-    message.reply({ embeds: [embed] });
-  }
-
-  if (command === 'liderlik' || command === 'top' || command === 'leaderboard') {
-    const guildXp = xpData[message.guild.id] || {};
-    const sorted = Object.entries(guildXp).sort((a, b) => b[1].xp - a[1].xp).slice(0, 10);
-    if (sorted.length === 0) return message.reply('Henüz kimse XP kazanmamış.');
-
-    let desc = '';
-    for (let i = 0; i < sorted.length; i++) {
-      const [id, data] = sorted[i];
-      desc += `**\( {i + 1}.** <@ \){id}> → Seviye **\( {data.level}** ( \){data.xp} XP)\n`;
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle('🏆 Seviye Sıralaması (Top 10)')
-      .setDescription(desc)
-      .setColor(0xffd700);
     message.reply({ embeds: [embed] });
   }
 
@@ -404,7 +336,7 @@ client.on('messageCreate', async (message) => {
     }, duration);
 
     await message.reply(`✅ Çekiliş başlatıldı! ${time} sonra sona erecek.`);
-}
+        }
   // Ticket
   if (command === 'ticket') {
     const reason = args.join(' ');
@@ -415,7 +347,7 @@ client.on('messageCreate', async (message) => {
       category = await message.guild.channels.create({ name: 'TICKETS', type: ChannelType.GuildCategory });
     }
 
-    const channelName = `ticket-${message.author.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20);
+    const channelName = `ticket-${message.author.username}`.toLowerCaseg, '').slice(0, 20);
 
     const ticketChannel = await message.guild.channels.create({
       name: channelName,
@@ -607,8 +539,8 @@ client.on('messageCreate', async (message) => {
     } catch {
       message.reply('❌ Embed gönderilemedi.');
     }
-                }
- // Moderasyon
+        }
+  // Moderasyon
   if (command === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ Ban Members yetkisi gerekli.');
     const member = message.mentions.members.first();
@@ -883,18 +815,18 @@ client.on('messageCreate', async (message) => {
     message.reply({ embeds: [embed] });
   }
 
-  // Yardım
+  // ====================== YARDIM MENÜSÜ (YENİ SƏLİQƏLİ VERSİYA) ======================
   if (command === 'yardim' || command === 'help') {
     const mainEmbed = new EmbedBuilder()
-      .setTitle('ASTROL Yardım Menüsü')
-      .setDescription('Aşağıdaki butonlardan kategori seç:')
+      .setTitle('📚 ASTROL Yardım Menüsü')
+      .setDescription('Aşağıdaki kategorilerden birini seçerek komutları görüntüleyebilirsiniz.')
       .setColor(0x5865F2)
-      .setFooter({ text: 'Sadece sen kullanabilirsin' });
+      .setFooter({ text: 'Sadece sen kullanabilirsin • ASTROL' });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('mod').setLabel('Moderasyon').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('jail').setLabel('Jail & Rol').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('sistem').setLabel('Sistem').setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId('mod').setLabel('Moderasyon').setStyle(ButtonStyle.Danger).setEmoji('🛡️'),
+      new ButtonBuilder().setCustomId('jail').setLabel('Jail & Rol').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
+      new ButtonBuilder().setCustomId('sistem').setLabel('Sistem').setStyle(ButtonStyle.Success).setEmoji('⚙️')
     );
 
     const msg = await message.reply({ embeds: [mainEmbed], components: [row] });
@@ -906,46 +838,69 @@ client.on('messageCreate', async (message) => {
 
     collector.on('collect', async (i) => {
       let embed;
+
       if (i.customId === 'mod') {
         embed = new EmbedBuilder()
-          .setTitle('Moderasyon Komutları')
+          .setTitle('🛡️ Moderasyon Komutları')
           .setColor(0xff0000)
           .setDescription(`
-\`.ban @kişi [sebep]\` \`.unban ID\`
-\`.mute @üye <süre>\` \`.unmute @üye\`
-\`.kick @üye\` \`.warn @üye\`
-\`.warnings\` \`.clearwarns\`
-\`.sil <sayı>\` \`.yavaş-mod\`
-\`.ticket <sebep>\` \`.çekiliş <süre> <sayı> <ödül>\`
-\`.kilit\` \`.kilitaç\` \`.kanal-yarat\` \`.kanal-sil\`
-\`.mesaj-gönder\` \`.embed\` \`.katıl\` \`.çık-kanal\`
+**1.** \`.ban @kişi [sebep]\` → Kullanıcıyı sunucudan yasaklar
+**2.** \`.unban <ID>\` → Yasaklı kullanıcının banını kaldırır
+**3.** \`.mute @üye <süre> [sebep]\` → Kullanıcıya timeout uygular (10m, 1h, 1d)
+**4.** \`.unmute @üye\` → Timeout'u kaldırır
+**5.** \`.kick @üye [sebep]\` → Kullanıcıyı sunucudan atar
+**6.** \`.warn @üye [sebep]\` → Kullanıcıya uyarı verir
+**7.** \`.warnings @üye\` → Uyarıları gösterir
+**8.** \`.clearwarns @üye\` → Tüm uyarıları siler
+**9.** \`.sil <sayı>\` → Belirtilen sayıda mesaj siler (1-100)
+**10.** \`.yavaş-mod <saniye>\` → Kanala yavaş mod ayarlar
+**11.** \`.ticket <sebep>\` → Destek talebi oluşturur
+**12.** \`.çekiliş <süre> <kazanan> <ödül>\` → Çekiliş başlatır
+**13.** \`.kilit [#kanal]\` → Kanalı kilitler (sadece admin görür)
+**14.** \`.kilitaç [#kanal]\` → Kanalın kilidini açar
+**15.** \`.kanal-yarat <ad> <herkeseaçık/kilitli>\` → Yeni kanal oluşturur
+**16.** \`.kanal-sil #kanal\` → Kanalı siler
+**17.** \`.mesaj-gönder #kanal <mesaj>\` → Belirtilen kanala mesaj gönderir
+**18.** \`.embed <başlık> <mesaj> [resim]\` → Güzel bir embed oluşturur
+**19.** \`.katıl #seskanalı\` → Botu ses kanalına sokar
+**20.** \`.çık-kanal\` → Botu ses kanalından çıkarır
           `);
       } else if (i.customId === 'jail') {
         embed = new EmbedBuilder()
-          .setTitle('Jail & Rol Komutları')
+          .setTitle('🔒 Jail & Rol Komutları')
           .setColor(0x8b0000)
           .setDescription(`
-\`.jail @üye\` \`.unjail @üye\`
-\`.jailrol <ID>\` \`.üyerol @rol\`
-\`.rolver @üye @rol\` \`.rolal @üye @rol\`
+**1.** \`.jail @üye\` → Kullanıcıyı jail'e atar
+**2.** \`.unjail @üye\` → Kullanıcıyı jail'den çıkarır
+**3.** \`.jailrol <rol ID>\` → Jail rolünü ayarlar
+**4.** \`.jailytrol @rol\` → Jail yetkili rolünü ayarlar
+**5.** \`.üyerol @rol\` → Normal üye rolünü ayarlar
+**6.** \`.rolver @üye @rol\` → Kullanıcıya rol verir
+**7.** \`.rolal @üye @rol\` → Kullanıcıdan rol alır
           `);
-      } else {
+      } else if (i.customId === 'sistem') {
         embed = new EmbedBuilder()
-          .setTitle('Sistem Komutları')
+          .setTitle('⚙️ Sistem Komutları')
           .setColor(0x00ff00)
           .setDescription(`
-\`.istatistik\` \`.seviye\` \`.liderlik\`
-\`.logsetup #kanal\`
-\`.küfür-ekle\` \`.küfür-sil\` \`.linkistisna\`
-\`.özelodasetup\` \`.sunucubilgi\` \`.avatar\` \`.snipe\`
-\`.stiker-çek\` \`.yardim\`
+**1.** \`.istatistik\` → Sunucu istatistiklerini gösterir
+**2.** \`.logsetup #kanal\` → Log kanalını ayarlar
+**3.** \`.küfür-ekle <kelime>\` → Küfür listesine kelime ekler
+**4.** \`.küfür-sil <kelime>\` → Küfür listesinden kelime siler
+**5.** \`.linkistisna #kanal\` → Link engelinden muaf kanal ayarlar
+**6.** \`.özelodasetup\` → Özel sesli oda sistemini kurar
+**7.** \`.sunucubilgi\` → Sunucu hakkında genel bilgi verir
+**8.** \`.avatar [@kişi]\` → Kullanıcının avatarını gösterir
+**9.** \`.snipe\` → Son silinen mesajı gösterir
+**10.** \`.stiker-çek\` → Sticker'ı sunucuya ekler (yanıt vererek)
+**11.** \`.yardim\` → Bu yardım menüsünü açar
           `);
       }
+
       await i.update({ embeds: [embed], components: [row] });
     });
   }
 });
-
 // ===== Log Eventləri =====
 client.on('messageDelete', async (message) => {
   if (!message.guild || message.author?.bot) return;
@@ -1034,4 +989,4 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);  
+client.login(process.env.DISCORD_TOKEN);
