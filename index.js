@@ -123,12 +123,13 @@ setInterval(async () => {
 
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} aktif!`);
-  client.user.setActivity('KETO⚡', { type: 3 });
+  client.user.setActivity('ASTROL | .yardim', { type: 3 });
 });
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
+  // Ticket
   if (interaction.customId === 'ticket_close') {
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return interaction.reply({ content: '❌ Bu düyməni yalnız yetkililer kullanabilir.', ephemeral: true });
@@ -155,6 +156,7 @@ client.on('interactionCreate', async (interaction) => {
     setTimeout(() => channel.delete().catch(() => {}), 5000);
   }
 
+  // Çekiliş
   if (interaction.customId === 'giveaway_join') {
     const giveaway = activeGiveaways.get(interaction.message.id);
     if (!giveaway || giveaway.ended) {
@@ -173,7 +175,7 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
-  // Leveling
+  // ===== Leveling =====
   const xpKey = `\( {message.guild.id}- \){message.author.id}`;
   if (!xpCooldown.has(xpKey) || Date.now() - xpCooldown.get(xpKey) > 60000) {
     xpCooldown.set(xpKey, Date.now());
@@ -192,7 +194,7 @@ client.on('messageCreate', async (message) => {
     saveJSON('xp.json', xpData);
   }
 
-  // Küfür
+  // ===== Küfür =====
   const contentLower = message.content.toLowerCase();
   if (küfürler.some(k => contentLower.includes(k.toLowerCase()))) {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -203,7 +205,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Link
+  // ===== Link =====
   const linkRegex = /(https?:\/\/[^\s]+)|(discord\.gg\/[^\s]+)|(discordapp\.com\/invite\/[^\s]+)/gi;
   if (linkRegex.test(message.content) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
     if (!config.linkExceptions.includes(message.channel.id)) {
@@ -214,7 +216,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Spam
+  // ===== Spam =====
   const key = `\( {message.author.id}- \){message.guild.id}`;
   const now = Date.now();
   if (!spamMap.has(key)) spamMap.set(key, []);
@@ -232,7 +234,7 @@ client.on('messageCreate', async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
-  // Logsetup
+  // ===== Logsetup =====
   if (command === 'logsetup') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
     const channel = message.mentions.channels.first();
@@ -242,7 +244,7 @@ client.on('messageCreate', async (message) => {
     message.reply(`✅ Log kanalı ayarlandı: ${channel}`);
   }
 
-  // İstatistik
+  // ===== İstatistik =====
   if (command === 'istatistik' || command === 'stats') {
     const guild = message.guild;
     await guild.members.fetch().catch(() => {});
@@ -269,7 +271,7 @@ client.on('messageCreate', async (message) => {
     message.reply({ embeds: [embed] });
   }
 
-  // Seviye
+  // ===== Seviye =====
   if (command === 'seviye' || command === 'rank' || command === 'level') {
     const member = message.mentions.members.first() || message.member;
     const data = xpData[message.guild.id]?.[member.id] || { xp: 0, level: 0 };
@@ -308,7 +310,7 @@ client.on('messageCreate', async (message) => {
     message.reply({ embeds: [embed] });
   }
 
-  // Çekiliş
+  // ===== Çekiliş =====
   if (command === 'çekiliş' || command === 'cekiliş' || command === 'giveaway') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply('❌ Yönetici yetkisi gerekli.');
@@ -402,7 +404,7 @@ client.on('messageCreate', async (message) => {
     }, duration);
 
     await message.reply(`✅ Çekiliş başlatıldı! ${time} sonra sona erecek.`);
-  }
+}
   // Ticket
   if (command === 'ticket') {
     const reason = args.join(' ');
@@ -605,8 +607,8 @@ client.on('messageCreate', async (message) => {
     } catch {
       message.reply('❌ Embed gönderilemedi.');
     }
-  }
-  // Moderasyon
+                }
+ // Moderasyon
   if (command === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return message.reply('❌ Ban Members yetkisi gerekli.');
     const member = message.mentions.members.first();
@@ -908,24 +910,43 @@ client.on('messageCreate', async (message) => {
         embed = new EmbedBuilder()
           .setTitle('Moderasyon Komutları')
           .setColor(0xff0000)
-          .setDescription('`.ban` `.unban` `.mute` `.unmute` `.kick` `.warn` `.warnings` `.clearwarns` `.sil` `.yavaş-mod` `.ticket` `.çekiliş` `.kilit` `.kilitaç` `.kanal-yarat` `.kanal-sil` `.mesaj-gönder` `.embed` `.katıl` `.çık-kanal`');
+          .setDescription(`
+\`.ban @kişi [sebep]\` \`.unban ID\`
+\`.mute @üye <süre>\` \`.unmute @üye\`
+\`.kick @üye\` \`.warn @üye\`
+\`.warnings\` \`.clearwarns\`
+\`.sil <sayı>\` \`.yavaş-mod\`
+\`.ticket <sebep>\` \`.çekiliş <süre> <sayı> <ödül>\`
+\`.kilit\` \`.kilitaç\` \`.kanal-yarat\` \`.kanal-sil\`
+\`.mesaj-gönder\` \`.embed\` \`.katıl\` \`.çık-kanal\`
+          `);
       } else if (i.customId === 'jail') {
         embed = new EmbedBuilder()
           .setTitle('Jail & Rol Komutları')
           .setColor(0x8b0000)
-          .setDescription('`.jail` `.unjail` `.jailrol` `.jailytrol` `.üyerol` `.rolver` `.rolal`');
+          .setDescription(`
+\`.jail @üye\` \`.unjail @üye\`
+\`.jailrol <ID>\` \`.üyerol @rol\`
+\`.rolver @üye @rol\` \`.rolal @üye @rol\`
+          `);
       } else {
         embed = new EmbedBuilder()
           .setTitle('Sistem Komutları')
           .setColor(0x00ff00)
-          .setDescription('`.istatistik` `.seviye` `.liderlik` `.logsetup` `.küfür-ekle` `.küfür-sil` `.linkistisna` `.özelodasetup` `.sunucubilgi` `.avatar` `.snipe` `.stiker-çek` `.yardim`');
+          .setDescription(`
+\`.istatistik\` \`.seviye\` \`.liderlik\`
+\`.logsetup #kanal\`
+\`.küfür-ekle\` \`.küfür-sil\` \`.linkistisna\`
+\`.özelodasetup\` \`.sunucubilgi\` \`.avatar\` \`.snipe\`
+\`.stiker-çek\` \`.yardim\`
+          `);
       }
       await i.update({ embeds: [embed], components: [row] });
     });
   }
 });
 
-// Log eventləri
+// ===== Log Eventləri =====
 client.on('messageDelete', async (message) => {
   if (!message.guild || message.author?.bot) return;
   lastDeleted[message.channel.id] = {
@@ -989,7 +1010,7 @@ client.on('guildMemberRemove', async (member) => {
   serverLog(member.guild, embed);
 });
 
-// Özel oda
+// ===== Özel Oda =====
 client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!config.özelOdaSetupChannel || !config.özelOdaCategory) return;
 
@@ -1013,4 +1034,4 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);  
