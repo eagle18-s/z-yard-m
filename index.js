@@ -429,15 +429,15 @@ if (command === 'kanal-yarat') {
         ] : []
       });
 
-      // Cavab mesajı (təmiz və zəmanətli)
       const durum = isLocked ? 'Kilitli' : 'Herkese açık';
-      await message.reply(`✅ Kanal oluşturuldu: \( {channel}\nDurum: ** \){durum}**`);
+      await message.reply('✅ Kanal oluşturuldu: ' + channel.toString() + '\nDurum: **' + durum + '**');
 
     } catch (err) {
       console.error(err);
       message.reply('❌ Kanal oluşturulamadı.');
     }
 }
+
  
 
   if (command === 'kanal-sil') {
