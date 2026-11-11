@@ -399,33 +399,45 @@ client.on('messageCreate', async (message) => {
   }
 
   // Kanal yarat / sil
-  if (command === 'kanal-yarat') {
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ Yönetici yetkisi gerekli.');
-    
+if (command === 'kanal-yarat') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('❌ Yönetici yetkisi gerekli.');
+    }
+
     const kanalAdi = args[0];
     const tip = args[1] ? args[1].toLowerCase() : null;
-    
+
     if (!kanalAdi || !tip || !['herkeseaçık', 'herkeseacik', 'kilitli'].includes(tip)) {
       return message.reply('❌ Kullanım:\n`.kanal-yarat <ad> herkeseaçık`\n`.kanal-yarat <ad> kilitli`');
     }
-    
+
     const isLocked = tip === 'kilitli';
-    
+
     try {
       const channel = await message.guild.channels.create({
         name: kanalAdi,
         type: ChannelType.GuildText,
         permissionOverwrites: isLocked ? [
-          { id: message.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-          { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] }
+          {
+            id: message.guild.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          {
+            id: client.user.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels]
+          }
         ] : []
       });
-      
-      await message.reply(`✅ Kanal oluşturuldu: \( {channel}\nDurum: ** \){isLocked ? 'Kilitli' : 'Herkese açık'}**`);
-    } catch {
+
+      // Cavab mesajı (təmiz və zəmanətli)
+      const durum = isLocked ? 'Kilitli' : 'Herkese açık';
+      await message.reply(`✅ Kanal oluşturuldu: \( {channel}\nDurum: ** \){durum}**`);
+
+    } catch (err) {
+      console.error(err);
       message.reply('❌ Kanal oluşturulamadı.');
     }
-  }
+}
  
 
   if (command === 'kanal-sil') {
