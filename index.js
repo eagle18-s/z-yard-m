@@ -416,7 +416,7 @@ client.on('messageCreate', async (message) => {
           { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] }
         ] : []
       });
-      await message.reply(`✅ Kanal oluşturuldu: \( {channel}\nDurum: ** \){isLocked ? 'Kilitli' : 'Herkese açık'}**`);
+      await message.reply(`✅ Kanal oluşturuldu: \( {channel}\nDurum: ** \)({isLocked ? 'Kilitli' : 'Herkese açık'}**`);
     } catch {
       message.reply('❌ Kanal oluşturulamadı.');
     }
